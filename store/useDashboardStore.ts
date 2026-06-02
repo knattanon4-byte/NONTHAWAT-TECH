@@ -1,5 +1,7 @@
+'use client';
 import { create } from 'zustand';
-import { Customer, Application, Project, MembershipLevel, PaymentStatus } from '@/types/database';
+import { supabase } from '@/lib/supabase/client';
+import { Customer, Application, Project, MembershipLevel } from '@/types/database';
 
 interface DashboardState {
   customers: Customer[];
@@ -7,53 +9,135 @@ interface DashboardState {
   projects: Record<string, Project[]>; 
   searchQuery: string;
   membershipFilter: MembershipLevel | 'ALL';
-  paymentFilter: PaymentStatus | 'ALL';
-  isCommandPaletteOpen: boolean;
+  isLoading: boolean;
   selectedCustomerId: string | null;
   
+  // Actions
   setSearchQuery: (query: string) => void;
   setMembershipFilter: (filter: MembershipLevel | 'ALL') => void;
-  setPaymentFilter: (filter: PaymentStatus | 'ALL') => void;
-  toggleCommandPalette: () => void;
   setSelectedCustomerId: (id: string | null) => void;
-  updateCustomerName: (id: string, name: string) => void;
-  addApplication: (app: Application) => void;
-  deleteApplication: (id: string) => void;
+  
+  // Supabase Sync Operations
+  syncInitialDataEngine: () => Promise<void>;
+  updateCustomerNameInCloud: (id: string, newName: string) => Promise<void>;
+  addApplicationInCloud: (name: string, slug: string) => Promise<void>;
+  deleteApplicationInCloud: (id: string) => Promise<void>;
+  saveQuotationInCloud: (quotationData: {
+    customerName: string;
+    items: any[];
+    discount: number;
+    subtotal: number;
+    vat: number;
+    total: number;
+  }) => Promise<boolean>;
 }
 
-export const useDashboardStore = create<DashboardState>((set) => ({
-  customers: [
-    { id: 'c1', name: 'Nova Core Industries', email: 'ops@nova.io', membership_level: 'BLACK', total_projects: 3, created_at: '2026-01-15' },
-    { id: 'c2', name: 'Hyperion Quantum Labs', email: 'research@hyperion.edu', membership_level: 'RED', total_projects: 1, created_at: '2026-02-20' },
-    { id: 'c3', name: 'Aether Nexus Group', email: 'billing@aether.net', membership_level: 'BLACK', total_projects: 4, created_at: '2026-03-05' },
-  ],
-  applications: [
-    { id: 'a1', name: 'Chronos Telemetry Node', slug: 'chronos-node', status: 'ACTIVE', version: 'v4.12.0' },
-    { id: 'a2', name: 'Nebula Stream Engine', slug: 'nebula-stream', status: 'ACTIVE', version: 'v2.4.1' },
-    { id: 'a3', name: 'Vortex Identity Router', slug: 'vortex-auth', status: 'MAINTENANCE', version: 'v1.0.8' },
-  ],
-  projects: {
-    'c1': [
-      { id: 'p1', customer_id: 'c1', name: 'Project singularity-alpha', payment_status: 'Paid', cost: 12000 },
-      { id: 'p2', customer_id: 'c1', name: 'Project dark-matter-mesh', payment_status: 'Pending', cost: 4500 },
-    ],
-    'c2': [{ id: 'p3', customer_id: 'c2', name: 'Project event-horizon-radar', payment_status: 'Overdue', cost: 8900 }],
-    'c3': [{ id: 'p4', customer_id: 'c3', name: 'Project deep-space-relay', payment_status: 'Paid', cost: 31000 }],
-  },
+export const useDashboardStore = create<DashboardState>((set, get) => ({
+  customers: [],
+  applications: [],
+  projects: {},
   searchQuery: '',
   membershipFilter: 'ALL',
-  paymentFilter: 'ALL',
-  isCommandPaletteOpen: false,
+  isLoading: false,
   selectedCustomerId: null,
 
   setSearchQuery: (query) => set({ searchQuery: query }),
   setMembershipFilter: (filter) => set({ membershipFilter: filter }),
-  setPaymentFilter: (filter) => set({ paymentFilter: filter }),
-  toggleCommandPalette: () => set((state) => ({ isCommandPaletteOpen: !state.isCommandPaletteOpen })),
   setSelectedCustomerId: (id) => set({ selectedCustomerId: id }),
-  updateCustomerName: (id, name) => set((state) => ({
-    customers: state.customers.map(c => c.id === id ? { ...c, name } : c)
-  })),
-  addApplication: (app) => set((state) => ({ applications: [...state.applications, app] })),
-  deleteApplication: (id) => set((state) => ({ applications: state.applications.filter(a => a.id !== id) })),
+
+  // 1. เอนจินดึงข้อมูลสดจาก Supabase
+  syncInitialDataEngine: async () => {
+    set({ isLoading: true });
+    try {
+      let { data: dbCustomers, error: errC } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
+      let { data: dbApps } = await supabase.from('applications').select('*');
+      let { data: dbProjects } = await supabase.from('projects').select('*');
+
+      if (errC) return;
+
+      if (!dbCustomers || dbCustomers.length === 0) {
+        const { data: seededCustomers } = await supabase.from('customers').insert([
+          { name: 'Nova Core Industries', email: 'ops@nova.io', membership_level: 'BLACK', total_projects: 2 },
+          { name: 'Hyperion Quantum Labs', email: 'research@hyperion.edu', membership_level: 'RED', total_projects: 1 }
+        ]).select();
+        
+        await supabase.from('applications').insert([
+          { name: 'Chronos Telemetry Node', slug: 'chronos-node', status: 'ACTIVE', version: 'v4.12.0' },
+          { name: 'Nebula Stream Engine', slug: 'nebula-stream', status: 'ACTIVE', version: 'v2.4.1' }
+        ]);
+
+        if (seededCustomers) {
+          await supabase.from('projects').insert([
+            { customer_id: seededCustomers[0].id, name: 'Project singularity-alpha', payment_status: 'Paid', cost: 120000 },
+            { customer_id: seededCustomers[0].id, name: 'Project dark-matter-mesh', payment_status: 'Pending', cost: 45000 },
+            { customer_id: seededCustomers[1].id, name: 'Project event-horizon-radar', payment_status: 'Overdue', cost: 89000 }
+          ]);
+        }
+
+        const { data: rc } = await supabase.from('customers').select('*');
+        const { data: ra } = await supabase.from('applications').select('*');
+        const { data: rp } = await supabase.from('projects').select('*');
+        dbCustomers = rc; dbApps = ra; dbProjects = rp;
+      }
+
+      const projectMap: Record<string, Project[]> = {};
+      dbProjects?.forEach((proj) => {
+        if (!projectMap[proj.customer_id]) projectMap[proj.customer_id] = [];
+        projectMap[proj.customer_id].push(proj as any);
+      });
+
+      set({ customers: dbCustomers as any[] || [], applications: dbApps as any[] || [], projects: projectMap });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  updateCustomerNameInCloud: async (id, newName) => {
+    await supabase.from('customers').update({ name: newName }).eq('id', id);
+    set((state) => ({ customers: state.customers.map(c => c.id === id ? { ...c, name: newName } : c) }));
+  },
+
+  addApplicationInCloud: async (name, slug) => {
+    const { data } = await supabase.from('applications').insert([{ name, slug, version: 'v1.0.0-PROTOTYPE', status: 'ACTIVE' }]).select().single();
+    if (data) {
+      set((state) => ({ applications: [data as any, ...state.applications] }));
+    }
+  },
+
+  deleteApplicationInCloud: async (id) => {
+    await supabase.from('applications').delete().eq('id', id);
+    set((state) => ({ applications: state.applications.filter((app) => app.id !== id) }));
+  },
+
+  // 5. ฟังก์ชันเซฟดราฟต์ใบเสนอราคา (เวอร์ชันหงายการ์ดส่องโค้ด Error ตัวจริง)
+  saveQuotationInCloud: async (data) => {
+    try {
+      const { error } = await supabase
+        .from('quotations')
+        .insert([
+          {
+            customer_name_fallback: data.customerName,
+            items: data.items,
+            discount_rate: data.discount,
+            vat_rate: 0.07,
+            subtotal: data.subtotal,
+            total: data.total,
+            status: 'DRAFT'
+          }
+        ]);
+
+      if (error) {
+        // ถ้าคลาวด์ส่ง Error กลับมา ให้พ่นข้อความจริงตรงนี้
+        alert(`Supabase Reject Error: ${error.message}\nCode: ${error.code}`);
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      // ถ้าพังที่เน็ตเวิร์ก หรือหาคีย์ API ไม่เจอ พ่นค่า Javascript Error ออกมาตรงๆ
+      alert(`Runtime Exception: ${err?.message || err}`);
+      return false;
+    }
+  }
 }));

@@ -1,57 +1,176 @@
 'use client';
-import React from 'react';
-import MetricCard from '@/components/dashboard/MetricCard';
-import OverviewAreaChart from '@/components/charts/OverviewAreaChart';
+import React, { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { useDashboardStore } from '@/store/useDashboardStore';
+import MetricCard from '@/components/dashboard/MetricCard'; // ดึงคอมโพเนนต์หล่อเท่ของคุณมาใช้งาน
+import OverviewAreaChart from '@/components/charts/OverviewAreaChart';
+import { supabase } from '@/lib/supabase/client'; // 🛰️ ต่อท่อตรงเข้าฐานข้อมูลหลัก
+import { Activity, ShieldAlert, Lock } from 'lucide-react';
+
+interface LocalSavedQuotation {
+  id: string;
+  timestamp: string;
+  customerName: string;
+  total: number;
+  items: any[];
+  discount: number;
+}
 
 export default function DashboardPage() {
-  const { customers, applications } = useDashboardStore();
+  const [metrics, setMetrics] = useState({
+    totalRevenue: 0,
+    manifestCount: 0,
+    averageValue: 0,
+  });
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  const totalProjectsCount = customers.reduce((acc, curr) => acc + curr.total_projects, 0);
-  const redMembersCount = customers.filter(c => c.membership_level === 'RED').length;
-  const blackMembersCount = customers.filter(c => c.membership_level === 'BLACK').length;
+  // 🔒 รหัสล็อกระบบความปลอดภัยหลังบ้าน
+  const [isRestricted, setIsRestricted] = useState(false);
+  const [activeNodesCount, setActiveNodesCount] = useState(0);
+
+  useEffect(() => {
+    const initializeDashboard = async () => {
+      setLoading(true);
+      try {
+        // 🛡️ ด่านกักกัน: ดึงข้อมูลโหนดทั้งหมดมาตรวจสอบสถานะการจ่ายเงิน
+        const { data: nodes, error: nodeError } = await supabase
+          .from('target_nodes')
+          .select('*');
+
+        if (!nodeError && nodes) {
+          // 1. นับจำนวนโหนดที่สถานะยังเป็น ACTIVE อยู่จริง ๆ บนคลาวด์
+          const activeCount = nodes.filter(n => n.status === 'ACTIVE').length;
+          setActiveNodesCount(activeCount);
+
+          // 2. ตรวจสอบว่ามีโหนดไหนโดนระงับสัญญาณ (TERMINATED) หรือไม่
+          const hasTerminatedNode = nodes.some(n => n.status === 'TERMINATED');
+          if (hasTerminatedNode) {
+            setIsRestricted(true); // สั่งสับสวิตช์ล็อกหน้าจอทันที!
+            setLoading(false);
+            return; // ดีดตัวออก ไม่โหลดข้อมูลธุรกิจด้านล่างต่อ
+          }
+        }
+
+        // โหลดข้อมูลประวัติใบเสนอราคาจาก Local คลัสเตอร์ตามเดิม
+        const savedHistory = localStorage.getItem('matrix_core_quote_history');
+        if (savedHistory) {
+          const historyData: LocalSavedQuotation[] = JSON.parse(savedHistory);
+          
+          const revenue = historyData.reduce((sum, item) => sum + item.total, 0);
+          const count = historyData.length;
+          const avg = count > 0 ? revenue / count : 0;
+
+          setMetrics({
+            totalRevenue: revenue,
+            manifestCount: count,
+            averageValue: avg,
+          });
+
+          const formattedChartData = [...historyData].reverse().map(item => ({
+            name: item.customerName.length > 10 ? `${item.customerName.slice(0, 10)}...` : item.customerName,
+            total: item.total,
+            discount: item.discount
+          }));
+
+          setChartData(formattedChartData);
+        }
+      } catch (err) {
+        console.error('Core telemetry connection error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeDashboard();
+  }, []);
+
+  // 🚨 หน้าจอ Lock Screen สีแดงไซไฟ ดักหน้าเอาไว้ พ่นพิษใส่ลูกค้าที่เบี้ยวเงิน
+  if (isRestricted) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] font-mono text-center p-8 bg-rose-950/10 border border-rose-500/20 rounded-3xl backdrop-blur-md max-w-5xl mx-auto space-y-4">
+        <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-full text-rose-400 animate-pulse">
+          <Lock size={40} />
+        </div>
+        <h1 className="text-xl font-bold text-rose-400 tracking-wider uppercase flex items-center gap-2">
+          <ShieldAlert size={20} /> CRITICAL ERROR: TERMINAL LINK SEVERED
+        </h1>
+        <p className="text-xs text-slate-400 max-w-md leading-relaxed">
+          Access Denied. Core interface vector telemetry has been suspended due to outstanding subscription billing parameters. 
+        </p>
+        <div className="pt-2 text-[10px] text-rose-500/70 bg-rose-500/5 px-4 py-2 rounded-xl border border-rose-500/10 font-mono tracking-widest">
+          RESTRICTED MODE ACTIVE // SETTLE LEDGER BALANCE VIA OPN GATEWAY TO RESTORE STREAM
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh] font-mono text-xs text-slate-500">
+        <Activity className="animate-spin mr-2 text-cyan-400" size={14} /> 
+        SYNCHRONIZING INTERNAL LEDGER STREAM...
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 transform-gpu max-w-5xl">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-          Telemetry Station Dashboard
-        </h2>
-        <p className="text-sm text-slate-400">Real-time status configurations & cluster computational overview.</p>
+        <h2 className="text-xl font-bold text-white tracking-tight">Core Interface Cluster</h2>
+        <p className="text-xs text-slate-400">Real-time terminal node analytics computed directly from secure cloud infrastructure.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard title="Total Enterprise Entities" value={customers.length} change="+12.4%" isPositive={true} glow="cyan" />
-        <MetricCard title="Active Cluster Units" value={totalProjectsCount} change="+4.1%" isPositive={true} />
-        <MetricCard title="Sub-Orbit (Red) Cells" value={redMembersCount} change="-2.5%" isPositive={false} />
-        <MetricCard title="Deep Matrix (Black) Node" value={blackMembersCount} change="+18.2%" isPositive={true} glow="purple" />
+      {/* 📊 เรียกใช้ MetricCard ของคุณแบบจัดเต็ม เรืองแสง Neon สะใจ */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <MetricCard 
+          title="Gross Revenue Ledger"
+          value={`฿${metrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          change="System Live"
+          isPositive={true}
+          glow="cyan"
+        />
+
+        {/* 🎯 ซิงค์ยอดจำนวนโหนดที่ออนไลน์ (ACTIVE) ของจริงจาก Supabase มาโชว์ที่นี่ */}
+        <MetricCard 
+          title="Active Operational Nodes"
+          value={`${activeNodesCount} Clusters`}
+          change={`+${activeNodesCount} Nodes Live`}
+          isPositive={true}
+          glow="purple"
+        />
+
+        <MetricCard 
+          title="Average Contract Allocation"
+          value={`฿${metrics.averageValue.toLocaleString(undefined, { minimumFractionDigits: 0 })}`}
+          change="Stable Alpha"
+          isPositive={true}
+          glow="none"
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <GlassCard className="lg:col-span-2">
-          <div className="flex justify-between items-center mb-6">
-            <h4 className="text-sm font-mono tracking-wider uppercase text-slate-300">Operational Vector Ingress</h4>
-            <span className="text-[10px] text-cyan-400 font-mono border border-cyan-500/20 px-2 py-0.5 rounded bg-cyan-500/5">LIVE STREAMING</span>
+      {/* 📈 แผงวงจรกราฟวิเคราะห์ข้อมูล */}
+      <GlassCard className="p-6 space-y-4 border border-slate-800/60">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <h3 className="text-sm font-medium text-white">Resource Output Waveform</h3>
+            <p className="text-[11px] text-slate-400">Dynamic tracking mapping total transaction sum against target profile entities.</p>
           </div>
-          <OverviewAreaChart />
-        </GlassCard>
-
-        <GlassCard>
-          <h4 className="text-sm font-mono tracking-wider uppercase text-slate-300 mb-6">Active Sync Repositories</h4>
-          <div className="space-y-4">
-            {applications.map(app => (
-              <div key={app.id} className="p-3 border border-slate-800 bg-slate-950/40 rounded-xl flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-slate-200">{app.name}</p>
-                  <p className="text-[10px] font-mono text-slate-500">{app.version}</p>
-                </div>
-                <span className={`w-2 h-2 rounded-full ${app.status === 'ACTIVE' ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,1)]' : 'bg-amber-500'}`} />
-              </div>
-            ))}
+          <div className="text-[10px] font-mono px-2 py-1 rounded bg-slate-950 text-slate-400 border border-slate-900">
+            SECURE CLOUD SYNC
           </div>
-        </GlassCard>
-      </div>
+        </div>
+
+        <div className="h-72 w-full pt-4">
+          {chartData.length === 0 ? (
+            <div className="h-full w-full flex flex-col items-center justify-center border border-dashed border-slate-900 rounded-2xl bg-slate-950/20 p-6 text-center">
+              <ShieldAlert className="text-slate-600 mb-2" size={24} />
+              <p className="text-xs font-mono text-slate-500 italic">No configuration vector maps detected in local memory block.</p>
+            </div>
+          ) : (
+            <OverviewAreaChart data={chartData} />
+          )}
+        </div>
+      </GlassCard>
     </div>
   );
 }
