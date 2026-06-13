@@ -1,12 +1,13 @@
 'use client';
 import React, { useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+// 🎯 1. นำเข้า useRouter คำสั่งบังคับเปลี่ยนหน้า
+import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutDashboard, Users, Cpu, FileSpreadsheet, BrainCircuit, Settings, Menu, X } from 'lucide-react';
 
 const navItems = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  // 🎯 แอบใส่คำว่า (Test) ไว้เช็กว่าเราแก้ถูกไฟล์ไหม
+  { name: 'Dashboard (Test)', href: '/', icon: LayoutDashboard },
   { name: 'Customers', href: '/customers', icon: Users },
   { name: 'Applications', href: '/apps', icon: Cpu },
   { name: 'Quotations', href: '/quotation', icon: FileSpreadsheet },
@@ -15,6 +16,7 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter(); // 🎯 2. เรียกใช้ Router
   const [isOpen, setIsOpen] = useState(true);
 
   return (
@@ -40,7 +42,6 @@ export default function Sidebar() {
                   N
                 </div>
                 <div>
-                  {/* แก้ไขชื่อแบรนดิ้งระบบตรงนี้ */}
                   <h1 className="text-xs font-bold tracking-widest text-white uppercase font-mono bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
                     NONTHAWAT.TECH
                   </h1>
@@ -52,7 +53,12 @@ export default function Sidebar() {
                 {navItems.map((item) => {
                   const isActive = pathname === item.href;
                   return (
-                    <Link key={item.href} href={item.href} className="relative block group">
+                    /* 🎯 3. เปลี่ยนเป็นปุ่ม <button> และใช้คำสั่ง onClick={router.push()} บังคับเปลี่ยนหน้า */
+                    <button 
+                      key={item.href} 
+                      onClick={() => router.push(item.href)} 
+                      className="w-full text-left relative block group cursor-pointer"
+                    >
                       {isActive && (
                         <motion.div 
                           layoutId="activeNavGlow" 
@@ -66,17 +72,17 @@ export default function Sidebar() {
                         <item.icon size={18} className={isActive ? 'text-cyan-400' : 'text-slate-400 group-hover:text-slate-200'} />
                         <span>{item.name}</span>
                       </div>
-                    </Link>
+                    </button>
                   );
                 })}
               </nav>
             </div>
 
             <div className="border-t border-slate-900 pt-4">
-              <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-white transition-colors text-sm">
+              <button onClick={() => router.push('#')} className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-white transition-colors text-sm cursor-pointer">
                 <Settings size={18} />
                 <span>System Configurations</span>
-              </Link>
+              </button>
             </div>
           </motion.aside>
         )}

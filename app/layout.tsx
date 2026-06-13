@@ -1,19 +1,21 @@
+import './globals.css';
 import React from 'react';
-import '@/app/globals.css'; 
-import AppLayout from '@/components/layout/AppLayout';
-import { Metadata } from 'next';
 
-export const metadata: Metadata = {
-  // เปลี่ยนชื่อเว็บตรงนี้
-  title: 'NONTHAWAT.TECH | Control Hub',
-  description: 'Premium Sci-Fi Data Center Matrix Management Workspace',
+export const metadata = {
+  title: 'NONTHAWAT.TECH PLATFORM',
+  description: 'Multi-Tenant SaaS Infrastructure Hub',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-black antialiased select-none">
-        <AppLayout>{children}</AppLayout>
+    <html lang="th">
+      {/* 🎯 เอา bg-[#FDFBF7] ออกเรียบร้อย เพื่อคืนพื้นที่ความมืดให้ระบบหลักครับบอส */}
+      <body className="antialiased">
+        {children}
       </body>
     </html>
   );

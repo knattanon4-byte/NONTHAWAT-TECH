@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
+  // ถ้า URL ที่เรียกเข้ามาขึ้นต้นด้วย /booking ให้ปล่อยผ่านฉลุย ไม่ต้องตรวจสิทธิ์การล็อกอิน
+if (request.nextUrl.pathname.startsWith('/booking')) {
+  return NextResponse.next();
+}
   const { pathname } = request.nextUrl;
   const sessionToken = request.cookies.get('hq_session_token')?.value;
 

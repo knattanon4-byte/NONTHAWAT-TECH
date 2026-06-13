@@ -62,9 +62,23 @@ export interface BillingCycle {
   is_settled: boolean;
 }
 
+export interface RestaurantBooking {
+  id: string;
+  shop_id: string;
+  booking_code: string;
+  customer_name: string;
+  phone: string;
+  booking_date: string;
+  booking_time: string;
+  guests_count: number;
+  table_number: string;
+  created_at?: string;
+}
+
 export interface Database {
   public: {
     Tables: {
+      restaurant_bookings: { Row: RestaurantBooking; Insert: Omit<RestaurantBooking, 'id' | 'created_at'>; Update: Partial<RestaurantBooking> };
       customers: { Row: Customer; Insert: Omit<Customer, 'id' | 'created_at'>; Update: Partial<Customer> };
       applications: { Row: Application; Insert: Omit<Application, 'id'>; Update: Partial<Application> };
       customer_applications: { Row: CustomerApplication; Insert: Omit<CustomerApplication, 'id'>; Update: Partial<CustomerApplication> };

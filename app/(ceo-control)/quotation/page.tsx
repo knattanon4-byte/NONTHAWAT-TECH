@@ -95,14 +95,15 @@ export default function QuotationPage() {
     return sum + (qty * price);
   }, 0);
 
-  const vat = (subtotal - watchedDiscount) * 0.07;
-  const total = Math.max((subtotal - watchedDiscount) + vat, 0);
+  // 🎯 ปรับลอจิกภาษีออก: เซตค่า VAT เป็น 0 และคำนวณยอดรวมสุทธิโดยตรง
+  const vat = 0;
+  const total = Math.max(subtotal - watchedDiscount, 0);
 
   const onSubmit = (data: QuotationFormValues) => {
     generateQuotationPDF(data.customerName, data.items as any, {
       subtotal,
       discount: watchedDiscount,
-      vat,
+      vat: 0, // ส่ง 0 ไปให้เทมเพลต PDF
       total
     });
 
@@ -122,12 +123,14 @@ export default function QuotationPage() {
 
   const downloadAgain = (quote: LocalSavedQuotation) => {
     const s = quote.items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unit_price)), 0);
-    const v = (s - quote.discount) * 0.07;
+    // 🎯 คำนวณยอดแบบไม่มี VAT สำหรับการดาวน์โหลดซ้ำจากประวัติ
+    const correctTotal = Math.max(s - quote.discount, 0);
+    
     generateQuotationPDF(quote.customerName, quote.items, {
       subtotal: s,
       discount: quote.discount,
-      vat: v,
-      total: quote.total
+      vat: 0,
+      total: correctTotal
     });
   };
 
@@ -140,7 +143,8 @@ export default function QuotationPage() {
   return (
     <div className="space-y-8 transform-gpu max-w-4xl pb-12">
       <div>
-        <h2 className="text-xl font-bold text-white tracking-tight">Quantum Quotation Manifest</h2>
+        {/* 🎯 เปลี่ยนชื่อหัวข้อหลักตามสั่งเรียบร้อยครับบอส */}
+        <h2 className="text-xl font-bold text-white tracking-tight">Quotation Management</h2>
         <p className="text-xs text-slate-400">Mint financial balance contracts and safely export core encrypted documents.</p>
       </div>
 
@@ -236,7 +240,7 @@ export default function QuotationPage() {
           <div className="border-t border-slate-900/80 pt-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="text-xs font-mono text-slate-400 space-y-1">
               <p>Subtotal Ledger: ฿{subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-              <p>Operational VAT Buffer (7%): ฿{vat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              {/* 🎯 ลบแถว Operational VAT Buffer (7%) ออกเรียบร้อยครับบอส */}
               <p className="text-sm font-bold text-white">Absolute Charge Sum: <span className="text-purple-400">฿{total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></p>
             </div>
 
