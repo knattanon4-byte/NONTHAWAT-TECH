@@ -1,5 +1,4 @@
 'use client';
-
 import React, { useState, useEffect } from 'react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { supabase } from '@/lib/supabase/client';
@@ -72,13 +71,12 @@ export default function CustomersPage() {
     fetchCustomers();
   }, []);
 
-  // 🔄 ฟังก์ชันสลับสถานะ Node รองรับทั้ง Cloud และ Local
+  // 🔄 ฟังก์ชันสลับสถานะ Node (ACTIVE <-> TERMINATED) รองรับทั้ง Cloud และ Local
   const handleToggleNodeStatus = async (id: string, currentStatus: 'ACTIVE' | 'TERMINATED') => {
     const nextStatus = currentStatus === 'ACTIVE' ? 'TERMINATED' : 'ACTIVE';
     
     try {
       if (isCloudLive) {
-        // 💡 เติม (as any) สยบบั๊ก Type Error ด่านสุดท้ายให้บอสเรียบร้อยครับฉลุยแน่นอน
         const { error } = await (supabase.from('target_nodes') as any)
           .update({ status: nextStatus })
           .eq('id', id);
@@ -88,7 +86,9 @@ export default function CustomersPage() {
       } else {
         // อัปเดตฝั่ง Local Storage กรณีออฟไลน์
         const updated = customers.map(c => c.id === id ? { ...c, status: nextStatus } : c);
-        setCustomers(updated);
+        
+        // 🎯 [FIXED] เติม "as CustomerNode[]" เพื่อล็อกประเภทข้อมูลไม่ให้ TypeScript แจกไฟแดงครับบอส
+        setCustomers(updated as CustomerNode[]);
         localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
       }
     } catch (err) {
@@ -121,7 +121,9 @@ export default function CustomersPage() {
       const currentLocal = localStorage.getItem('matrix_core_customer_ledger');
       const list = currentLocal ? JSON.parse(currentLocal) : [];
       const updated = [newNode, ...list];
-      setCustomers(updated);
+      
+      // 🎯 [SAFETY FIX] ใส่ดักไว้ตรงนี้ด้วยเพื่อความชัวร์ 100% ว่าจะไม่มีด่านไหนคัดค้านไทป์อีกครับ
+      setCustomers(updated as CustomerNode[]);
       localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
     } finally {
       setNodeName('');
@@ -136,7 +138,7 @@ export default function CustomersPage() {
         fetchCustomers();
       } else {
         const updated = customers.filter(c => c.id !== id);
-        setCustomers(updated);
+        setCustomers(updated as CustomerNode[]);
         localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
       }
     } catch (err) {
