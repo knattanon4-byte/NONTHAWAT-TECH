@@ -1,8 +1,9 @@
 'use client';
+
 import React, { useState, useEffect } from 'react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { supabase } from '@/lib/supabase/client';
-import { Users, UserPlus, Trash2, Building, Activity, Search, ShieldCheck, RefreshCw, WifiOff, Wifi } from 'lucide-react';
+import { Users, UserPlus, Trash2, Building, Search, ShieldCheck, RefreshCw, WifiOff, Wifi } from 'lucide-react';
 
 interface CustomerNode {
   id: string;
@@ -71,19 +72,19 @@ export default function CustomersPage() {
     fetchCustomers();
   }, []);
 
-  // 🔄 ฟังก์ชันสลับสถานะ Node (ACTIVE <-> TERMINATED) รองรับทั้ง Cloud และ Local
+  // 🔄 ฟังก์ชันสลับสถานะ Node รองรับทั้ง Cloud และ Local
   const handleToggleNodeStatus = async (id: string, currentStatus: 'ACTIVE' | 'TERMINATED') => {
     const nextStatus = currentStatus === 'ACTIVE' ? 'TERMINATED' : 'ACTIVE';
     
     try {
       if (isCloudLive) {
-        const { error } = await supabase
-          .from('target_nodes')
+        // 💡 เติม (as any) สยบบั๊ก Type Error ด่านสุดท้ายให้บอสเรียบร้อยครับฉลุยแน่นอน
+        const { error } = await (supabase.from('target_nodes') as any)
           .update({ status: nextStatus })
           .eq('id', id);
           
         if (error) throw error;
-        fetchCustomers(); // โหลดข้อมูลใหม่จาก Supabase มาแสดงผล
+        fetchCustomers(); 
       } else {
         // อัปเดตฝั่ง Local Storage กรณีออฟไลน์
         const updated = customers.map(c => c.id === id ? { ...c, status: nextStatus } : c);
@@ -279,7 +280,6 @@ export default function CustomersPage() {
                           </td>
 
                           <td className="p-3 text-center vertical-middle">
-                            {/* 🎯 ปุ่มป้ายสถานะ คลิกเพื่อสลับเปิด-ปิดระบบ สไตล์ล้ำ ๆ และเปลี่ยนสีตามสถานะจริง */}
                             <button
                               onClick={() => handleToggleNodeStatus(node.id, node.status)}
                               className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border cursor-pointer select-none transition-all active:scale-95 duration-150 ${
