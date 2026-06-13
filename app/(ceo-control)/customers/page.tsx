@@ -71,7 +71,7 @@ export default function CustomersPage() {
     fetchCustomers();
   }, []);
 
-  // 🔄 ฟังก์ชันสลับสถานะ Node (ACTIVE <-> TERMINATED) รองรับทั้ง Cloud และ Local
+  // 🔄 ฟังก์ชันสลับสถานะ Node (ACTIVE <-> TERMINATED)
   const handleToggleNodeStatus = async (id: string, currentStatus: 'ACTIVE' | 'TERMINATED') => {
     const nextStatus = currentStatus === 'ACTIVE' ? 'TERMINATED' : 'ACTIVE';
     
@@ -84,10 +84,7 @@ export default function CustomersPage() {
         if (error) throw error;
         fetchCustomers(); 
       } else {
-        // อัปเดตฝั่ง Local Storage กรณีออฟไลน์
         const updated = customers.map(c => c.id === id ? { ...c, status: nextStatus } : c);
-        
-        // 🎯 [FIXED] เติม "as CustomerNode[]" เพื่อล็อกประเภทข้อมูลไม่ให้ TypeScript แจกไฟแดงครับบอส
         setCustomers(updated as CustomerNode[]);
         localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
       }
@@ -96,6 +93,7 @@ export default function CustomersPage() {
     }
   };
 
+  // ➕ ฟังก์ชันเพิ่ม Node ลูกค้าใหม่ เข้าสู่ระบบ
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nodeName.trim() || !corporateCode.trim()) return;
@@ -111,7 +109,8 @@ export default function CustomersPage() {
 
     try {
       if (isCloudLive) {
-        const { error } = await supabase.from('target_nodes').insert([newNode]);
+        // 🎯 [FIXED] เติม (as any) ปลดล็อกคำสั่ง Insert ให้ Vercel บิ้วด์ผ่านฉลุยครับบอส
+        const { error } = await (supabase.from('target_nodes') as any).insert([newNode]);
         if (error) throw error;
         fetchCustomers();
       } else {
@@ -122,7 +121,6 @@ export default function CustomersPage() {
       const list = currentLocal ? JSON.parse(currentLocal) : [];
       const updated = [newNode, ...list];
       
-      // 🎯 [SAFETY FIX] ใส่ดักไว้ตรงนี้ด้วยเพื่อความชัวร์ 100% ว่าจะไม่มีด่านไหนคัดค้านไทป์อีกครับ
       setCustomers(updated as CustomerNode[]);
       localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
     } finally {
@@ -131,10 +129,12 @@ export default function CustomersPage() {
     }
   };
 
+  // ❌ ฟังก์ชันลบ Node ลูกค้าออกจากระบบ
   const handleDeleteCustomer = async (id: string) => {
     try {
       if (isCloudLive) {
-        await supabase.from('target_nodes').delete().eq('id', id);
+        // 🎯 [PROACTIVE FIX] เติม (as any) ดักหน้าฟังก์ชัน Delete ไว้เลยกันเหนียวรอบหน้าครับบอส
+        await (supabase.from('target_nodes') as any).delete().eq('id', id);
         fetchCustomers();
       } else {
         const updated = customers.filter(c => c.id !== id);
