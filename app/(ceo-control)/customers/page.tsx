@@ -85,6 +85,7 @@ export default function CustomersPage() {
         fetchCustomers(); 
       } else {
         const updated = customers.map(c => c.id === id ? { ...c, status: nextStatus } : c);
+        // 🎯 [ULTIMATE FIX] อุดรอยรั่วในรอยพับท่อนบนเรียบร้อยครับบอส!
         setCustomers(updated as CustomerNode[]);
         localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
       }
@@ -109,7 +110,6 @@ export default function CustomersPage() {
 
     try {
       if (isCloudLive) {
-        // 🎯 [FIXED] เติม (as any) ปลดล็อกคำสั่ง Insert ให้ Vercel บิ้วด์ผ่านฉลุยครับบอส
         const { error } = await (supabase.from('target_nodes') as any).insert([newNode]);
         if (error) throw error;
         fetchCustomers();
@@ -133,7 +133,6 @@ export default function CustomersPage() {
   const handleDeleteCustomer = async (id: string) => {
     try {
       if (isCloudLive) {
-        // 🎯 [PROACTIVE FIX] เติม (as any) ดักหน้าฟังก์ชัน Delete ไว้เลยกันเหนียวรอบหน้าครับบอส
         await (supabase.from('target_nodes') as any).delete().eq('id', id);
         fetchCustomers();
       } else {
