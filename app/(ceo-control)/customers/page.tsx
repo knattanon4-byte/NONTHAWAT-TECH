@@ -42,7 +42,7 @@ export default function CustomersPage() {
       if (!nodeError && nodes) {
         // 🎯 [FIXED] เติม (n: any) เพื่อเคลียร์ด่านตรวจ implicit any บรรทัด 45 ชัวร์ 100% ครับบอส
         // 🎯 ปรับบรรทัดที่ 42 ให้เป็นเวอร์ชันปลดล็อก Vercel ตัวนี้เลยครับบอส
-const activeCount = (nodes as any[]).filter((n: any) => n.status === 'ACTIVE').length;
+        const activeCount = (nodes as any[]).filter((n: any) => n.status === 'ACTIVE').length;
         setActiveNodesCount(activeCount);
       }
 
