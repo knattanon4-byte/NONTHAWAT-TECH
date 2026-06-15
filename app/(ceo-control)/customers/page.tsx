@@ -22,6 +22,9 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [isCloudLive, setIsCloudLive] = useState(true); 
   
+  // 🎯 ตัวแปรเก็บจำนวน Active Node ของบอส
+  const [activeNodesCount, setActiveNodesCount] = useState<number>(0);
+
   // Form State
   const [nodeName, setNodeName] = useState('');
   const [corporateCode, setCorporateCode] = useState('');
@@ -30,17 +33,23 @@ export default function CustomersPage() {
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('target_nodes')
+      // 💡 [FIXED บรรทัด 35-38] เติม (as any) ป้องกันไฟแดงตอนดึงข้อมูลตารางคู่แรก
+      const { data: nodes, error: nodeError } = await (supabase.from('target_nodes') as any)
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (nodeError) throw nodeError;
 
-      if (data && data.length > 0) {
-        setCustomers(data as CustomerNode[]);
+      // 💡 [FIXED บรรทัด 40-45] เติม (nodes as any[]) เพื่อให้ด่านตรวจยอมให้กรองหาค่า .status ได้ฉลุยครับบอส
+      if (!nodeError && nodes) {
+        const activeCount = (nodes as any[]).filter(n => n.status === 'ACTIVE').length;
+        setActiveNodesCount(activeCount);
+      }
+
+      if (nodes && nodes.length > 0) {
+        setCustomers(nodes as CustomerNode[]);
         setIsCloudLive(true);
-        localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(data));
+        localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(nodes));
       } else {
         loadLocalBackup();
       }
@@ -56,13 +65,17 @@ export default function CustomersPage() {
   const loadLocalBackup = () => {
     const saved = localStorage.getItem('matrix_core_customer_ledger');
     if (saved) {
-      setCustomers(JSON.parse(saved));
+      const parsedData = JSON.parse(saved);
+      setCustomers(parsedData);
+      const activeCount = (parsedData as any[]).filter(n => n.status === 'ACTIVE').length;
+      setActiveNodesCount(activeCount);
     } else {
       const defaultNodes: CustomerNode[] = [
         { id: 'NOD-1', node_name: 'Ananyata Chivato Node', corporate_code: 'ANC-01', sector: 'Financial Matrix', status: 'ACTIVE', joined_date: '28/5/2026' },
         { id: 'NOD-2', node_name: 'Srinakarin Sandbox Group', corporate_code: 'SRN-99', sector: 'Retail Operation', status: 'ACTIVE', joined_date: '20/5/2026' }
       ];
       setCustomers(defaultNodes);
+      setActiveNodesCount(2);
       localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(defaultNodes));
     }
   };
@@ -71,7 +84,7 @@ export default function CustomersPage() {
     fetchCustomers();
   }, []);
 
-  // 🔄 ฟังก์ชันสลับสถานะ Node (ACTIVE <-> TERMINATED)
+  // 🔄 ฟังก์ชันสลับสถานะ Node (ACTIVE <-> TERMINATED) รองรับทั้ง Cloud และ Local
   const handleToggleNodeStatus = async (id: string, currentStatus: 'ACTIVE' | 'TERMINATED') => {
     const nextStatus = currentStatus === 'ACTIVE' ? 'TERMINATED' : 'ACTIVE';
     
@@ -85,16 +98,17 @@ export default function CustomersPage() {
         fetchCustomers(); 
       } else {
         const updated = customers.map(c => c.id === id ? { ...c, status: nextStatus } : c);
-        // 🎯 [ULTIMATE FIX] อุดรอยรั่วในรอยพับท่อนบนเรียบร้อยครับบอส!
         setCustomers(updated as CustomerNode[]);
         localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
+        const activeCount = (updated as any[]).filter(n => n.status === 'ACTIVE').length;
+        setActiveNodesCount(activeCount);
       }
     } catch (err) {
       console.error('Error toggling node status:', err);
     }
   };
 
-  // ➕ ฟังก์ชันเพิ่ม Node ลูกค้าใหม่ เข้าสู่ระบบ
+  // ➕ ฟังก์ชันเพิ่ม Node ลูกค้าใหม่
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nodeName.trim() || !corporateCode.trim()) return;
@@ -122,14 +136,16 @@ export default function CustomersPage() {
       const updated = [newNode, ...list];
       
       setCustomers(updated as CustomerNode[]);
-      localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
+      localStorage.setItem('matrix_core_ledger', JSON.stringify(updated));
+      const activeCount = (updated as any[]).filter(n => n.status === 'ACTIVE').length;
+      setActiveNodesCount(activeCount);
     } finally {
       setNodeName('');
       setCorporateCode('');
     }
   };
 
-  // ❌ ฟังก์ชันลบ Node ลูกค้าออกจากระบบ
+  // ❌ ฟังก์ชันลบ Node ลูกค้า
   const handleDeleteCustomer = async (id: string) => {
     try {
       if (isCloudLive) {
@@ -139,6 +155,8 @@ export default function CustomersPage() {
         const updated = customers.filter(c => c.id !== id);
         setCustomers(updated as CustomerNode[]);
         localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
+        const activeCount = (updated as any[]).filter(n => n.status === 'ACTIVE').length;
+        setActiveNodesCount(activeCount);
       }
     } catch (err) {
       console.warn('Delete redirected to local node.');
@@ -168,7 +186,7 @@ export default function CustomersPage() {
               {isCloudLive ? 'SUPABASE ONLINE' : 'LOCAL SAFE MODE'}
             </span>
           </h2>
-          <p className="text-xs text-slate-400">Dynamic network cluster mapping client identity parameters securely.</p>
+          <p className="text-xs text-slate-400">Dynamic network cluster mapping client identity parameters securely. Active Count: {activeNodesCount}</p>
         </div>
         
         <div className="relative w-full sm:w-64">
