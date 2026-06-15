@@ -42,7 +42,7 @@ export default function CustomersPage() {
 
       // 💡 [FIXED บรรทัด 40-45] เติม (nodes as any[]) เพื่อให้ด่านตรวจยอมให้กรองหาค่า .status ได้ฉลุยครับบอส
       if (!nodeError && nodes) {
-        const activeCount = (nodes as any[]).filter(n => n.status === 'ACTIVE').length;
+        const activeCount = nodes.filter(n => n.status === 'ACTIVE').length; // ❌ ตัวแปร status โดน TypeScript สั่งบล็อก
         setActiveNodesCount(activeCount);
       }
 
