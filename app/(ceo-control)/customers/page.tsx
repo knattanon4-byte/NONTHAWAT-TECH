@@ -22,7 +22,7 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [isCloudLive, setIsCloudLive] = useState(true); 
   
-  // 🎯 ตัวแปรเก็บจำนวน Active Node ของบอส
+  // ตัวแปรเก็บจำนวน Active Node
   const [activeNodesCount, setActiveNodesCount] = useState<number>(0);
 
   // Form State
@@ -33,16 +33,15 @@ export default function CustomersPage() {
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      // 💡 [FIXED บรรทัด 35-38] เติม (as any) ป้องกันไฟแดงตอนดึงข้อมูลตารางคู่แรก
       const { data: nodes, error: nodeError } = await (supabase.from('target_nodes') as any)
         .select('*')
         .order('created_at', { ascending: false });
 
       if (nodeError) throw nodeError;
 
-      // 💡 [FIXED บรรทัด 40-45] เติม (nodes as any[]) เพื่อให้ด่านตรวจยอมให้กรองหาค่า .status ได้ฉลุยครับบอส
       if (!nodeError && nodes) {
-        const activeCount = nodes.filter(n => n.status === 'ACTIVE').length; // ❌ ตัวแปร status โดน TypeScript สั่งบล็อก
+        // 🎯 [FIXED] เติม (n: any) เพื่อเคลียร์ด่านตรวจ implicit any บรรทัด 45 ชัวร์ 100% ครับบอส
+        const activeCount = (nodes as any[]).filter((n: any) => n.status === 'ACTIVE').length;
         setActiveNodesCount(activeCount);
       }
 
@@ -67,7 +66,8 @@ export default function CustomersPage() {
     if (saved) {
       const parsedData = JSON.parse(saved);
       setCustomers(parsedData);
-      const activeCount = (parsedData as any[]).filter(n => n.status === 'ACTIVE').length;
+      // 🎯 [FIXED] เติม (n: any) ดักทางฝั่ง Local Backup ไว้ด้วยครับ
+      const activeCount = (parsedData as any[]).filter((n: any) => n.status === 'ACTIVE').length;
       setActiveNodesCount(activeCount);
     } else {
       const defaultNodes: CustomerNode[] = [
@@ -84,7 +84,7 @@ export default function CustomersPage() {
     fetchCustomers();
   }, []);
 
-  // 🔄 ฟังก์ชันสลับสถานะ Node (ACTIVE <-> TERMINATED) รองรับทั้ง Cloud และ Local
+  // 🔄 ฟังก์ชันสลับสถานะ Node (ACTIVE <-> TERMINATED)
   const handleToggleNodeStatus = async (id: string, currentStatus: 'ACTIVE' | 'TERMINATED') => {
     const nextStatus = currentStatus === 'ACTIVE' ? 'TERMINATED' : 'ACTIVE';
     
@@ -97,10 +97,11 @@ export default function CustomersPage() {
         if (error) throw error;
         fetchCustomers(); 
       } else {
-        const updated = customers.map(c => c.id === id ? { ...c, status: nextStatus } : c);
+        // 🎯 [FIXED] เติม (c: any) และ (n: any) เคลียร์ทางฝั่งฟังก์ชันสลับสถานะครับ
+        const updated = customers.map((c: any) => c.id === id ? { ...c, status: nextStatus } : c);
         setCustomers(updated as CustomerNode[]);
         localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
-        const activeCount = (updated as any[]).filter(n => n.status === 'ACTIVE').length;
+        const activeCount = (updated as any[]).filter((n: any) => n.status === 'ACTIVE').length;
         setActiveNodesCount(activeCount);
       }
     } catch (err) {
@@ -137,7 +138,8 @@ export default function CustomersPage() {
       
       setCustomers(updated as CustomerNode[]);
       localStorage.setItem('matrix_core_ledger', JSON.stringify(updated));
-      const activeCount = (updated as any[]).filter(n => n.status === 'ACTIVE').length;
+      // 🎯 [FIXED] เติม (n: any) ตรงส่วนรับแอดฟอร์มลูกค้าใหม่ครับ
+      const activeCount = (updated as any[]).filter((n: any) => n.status === 'ACTIVE').length;
       setActiveNodesCount(activeCount);
     } finally {
       setNodeName('');
@@ -152,10 +154,11 @@ export default function CustomersPage() {
         await (supabase.from('target_nodes') as any).delete().eq('id', id);
         fetchCustomers();
       } else {
-        const updated = customers.filter(c => c.id !== id);
+        // 🎯 [FIXED] เติม (c: any) และ (n: any) ตรงระบบลบข้อมูลป้องกันเออร์เรอร์ครับบอส
+        const updated = customers.filter((c: any) => c.id !== id);
         setCustomers(updated as CustomerNode[]);
         localStorage.setItem('matrix_core_customer_ledger', JSON.stringify(updated));
-        const activeCount = (updated as any[]).filter(n => n.status === 'ACTIVE').length;
+        const activeCount = (updated as any[]).filter((n: any) => n.status === 'ACTIVE').length;
         setActiveNodesCount(activeCount);
       }
     } catch (err) {
@@ -163,7 +166,8 @@ export default function CustomersPage() {
     }
   };
 
-  const filteredCustomers = customers.filter(c => {
+  // 🎯 [FIXED] เติม (c: any) ครอบลูปฟิลเตอร์ค้นหาหน้าจอหลัก
+  const filteredCustomers = customers.filter((c: any) => {
     const nameStr = c?.node_name || c?.nodeName || '';
     const codeStr = c?.corporate_code || c?.corporateCode || '';
     return nameStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
