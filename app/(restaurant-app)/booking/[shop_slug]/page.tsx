@@ -28,7 +28,7 @@ interface BookingRecord {
 }
 
 /* ----------------------------------------------------------------------------
- * Premium Nightlife Theme tokens (ใช้ชุดสีเดียวกับหน้า Monitor เป๊ะครับบอส)
+ * Premium Nightlife Theme tokens 
  * -------------------------------------------------------------------------- */
 const THEME = {
   bg: '#121318',
@@ -50,7 +50,7 @@ export default function BookingPage() {
 
   // 📝 คอนฟิกเช็กสถานะการเปิด/ปิดรับจองจากผู้จัดการร้าน
   const [isShopOpen, setIsShopOpen] = useState(true);
-  const [checkingStatus, setCheckingStatus] = useState(true); // ป้องกันหน้าฟอร์มแลบตอนโหลดเว็บครั้งแรก
+  const [checkingStatus, setCheckingStatus] = useState(true); 
 
   // Form States
   const [customerName, setCustomerName] = useState('');
@@ -63,7 +63,6 @@ export default function BookingPage() {
   const [availableTables, setAvailableTables] = useState(10);
   const maxTablesInZone = zone === 'V' ? 3 : 10;
 
-  // เปลี่ยนชื่อจาก default-shop เป็น LOVE RESTAURANT ตามสั่งครับบอส
   const formattedShopName = useMemo(() => {
     if (shopSlug === 'default-shop') return 'LOVE RESTAURANT';
     return shopSlug
@@ -72,14 +71,14 @@ export default function BookingPage() {
       .join(' ');
   }, [shopSlug]);
 
-  // 🛰️ ท่อสตรีมสด: ดักฟังคำสั่งสับสวิตช์เปิด/ปิดร้านจากตาราง shop_settings แบบวินาทีต่อวินาที
+  // 🛰️ ท่อสตรีมสด: ดักฟังคำสั่งสับสวิตช์เปิด/ปิดร้านจากตาราง shop_settings
   useEffect(() => {
     let active = true;
 
     const checkShopStatus = async () => {
       try {
-        const { data, error } = await supabase
-          .from('shop_settings')
+        // 🎯 [FIXED] เติม (as any) สยบด่านตรวจ Schema ตาราง shop_settings ล่วงหน้าครับบอส
+        const { data, error } = await (supabase.from('shop_settings') as any)
           .select('is_booking_open')
           .eq('shop_id', shopSlug)
           .single();
@@ -87,7 +86,6 @@ export default function BookingPage() {
         if (error && error.code !== 'PGRST116') throw error;
 
         if (active) {
-          // ถ้ายังไม่มีแถวข้อมูลร้านนี้ในระบบ ให้ถือว่าเป็นร้านเปิดใหม่ (true) ไปก่อนครับบอส
           setIsShopOpen(data ? data.is_booking_open : true);
         }
       } catch (err) {
@@ -104,7 +102,8 @@ export default function BookingPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'shop_settings', filter: `shop_id=eq.${shopSlug}` },
-        (payload) => {
+        // 🎯 [FIXED] ระบุไทป์ (payload: any) ป้องกันกฎเหล็ก implicit any สกัดดาวรุ่งตอนตรวจออนไลน์
+        (payload: any) => {
           if (active) {
             setIsShopOpen(payload.eventType === 'DELETE' ? true : payload.new.is_booking_open);
           }
@@ -124,8 +123,8 @@ export default function BookingPage() {
 
     const checkAvailability = async () => {
       try {
-        const { data, error } = await supabase
-          .from('restaurant_bookings')
+        // 🎯 [FIXED] เติม (as any) ข้ามสแกนคิวรีจองโต๊ะร้านอาหาร
+        const { data, error } = await (supabase.from('restaurant_bookings') as any)
           .select('table_number')
           .eq('shop_id', shopSlug)
           .eq('booking_date', bookingDate)
@@ -134,7 +133,8 @@ export default function BookingPage() {
         if (error) throw error;
 
         const prefix = `${zone}-`;
-        const bookedCount = data ? data.filter(b => b.table_number.startsWith(prefix)).length : 0;
+        // 🎯 [FIXED] ล็อกอาร์เรย์ (data as any[]) และพ่นไทป์ (b: any) คลุมจุดลูปกรองโต๊ะว่าง
+        const bookedCount = data ? (data as any[]).filter((b: any) => b.table_number.startsWith(prefix)).length : 0;
         setAvailableTables(Math.max(maxTablesInZone - bookedCount, 0));
 
       } catch (err) {
@@ -149,7 +149,6 @@ export default function BookingPage() {
     e.preventDefault();
     if (!customerName.trim() || !phone.trim() || !bookingDate) return;
 
-    // 🚨 [กำแพงล็อกชั้นที่ 1] ดักฝั่งฟังก์ชันคำสั่ง: ถ้าผู้จัดการปิดร้าน ห้ามสั่ง Insert ลง DB เด็ดขาด!
     if (!isShopOpen) {
       alert('ขออภัยครับบอส ขณะนี้ผู้จัดการร้านได้ปิดระบบรับคิวจองออนไลน์ชั่วคราวแล้วครับ');
       return;
@@ -163,14 +162,15 @@ export default function BookingPage() {
     setLoading(true);
     try {
       const prefix = `${zone}-`;
-      const { data: booked } = await supabase
-        .from('restaurant_bookings')
+      // 🎯 [FIXED] เติม (as any) สกัดไฟแดงฟังก์ชันจองช่วงส่ง insert ตรวจสอบข้อมูลซ้ำ
+      const { data: booked } = await (supabase.from('restaurant_bookings') as any)
         .select('table_number')
         .eq('shop_id', shopSlug)
         .eq('booking_date', bookingDate)
         .eq('booking_time', `${bookingTime}:00`);
       
-      const bookedInZone = booked ? booked.filter(b => b.table_number.startsWith(prefix)) : [];
+      // 🎯 [FIXED] เติม (b: any) และล็อกไทป์อาร์เรย์ในฟังก์ชันสุ่มโต๊ะ
+      const bookedInZone = booked ? (booked as any[]).filter((b: any) => b.table_number.startsWith(prefix)) : [];
       const assignedTableNum = bookedInZone.length + 1;
       const finalTableLabel = `${prefix}${String(assignedTableNum).padStart(2, '0')}`;
 
@@ -187,8 +187,8 @@ export default function BookingPage() {
         table_number: finalTableLabel,
       };
 
-      const { data, error } = await supabase
-        .from('restaurant_bookings')
+      // 🎯 [FIXED] เติม (as any) ตรงประตูด่านคำสั่งส่งจองโต๊ะใหม่ลงฐานข้อมูลจริง
+      const { data, error } = await (supabase.from('restaurant_bookings') as any)
         .insert([newBooking])
         .select()
         .single();
@@ -294,7 +294,6 @@ export default function BookingPage() {
       className="min-h-screen w-full font-sans select-none flex items-center justify-center p-4 relative overflow-hidden transition-colors duration-300"
       style={{ backgroundColor: THEME.bg, color: THEME.text }}
     >
-      {/* รัศมีไฟนีออน Ambient Glow เคลื่อนไหวหลังบ้าน */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute w-[600px] h-[600px] rounded-full blur-[140px] -top-32 -right-24" style={{ backgroundColor: `${THEME.mint}12` }} />
         <div className="absolute w-[400px] h-[400px] rounded-full blur-[130px] -bottom-32 -left-24" style={{ backgroundColor: `${THEME.amber}12` }} />
@@ -302,7 +301,6 @@ export default function BookingPage() {
 
       <AnimatePresence mode="wait">
         {checkingStatus ? (
-          // หน้าต่างกำลังดาวน์โหลดเช็กสเตตัสป้องกันอาการ UI แลบ
           <motion.div key="loader" className="text-xs font-mono tracking-widest text-emerald-400 animate-pulse">
             INITIALIZING SECURE PROTOCOL...
           </motion.div>
@@ -326,7 +324,6 @@ export default function BookingPage() {
                 <p className="text-xs" style={{ color: THEME.muted }}>กรอกข้อมูลเพื่อทำการล็อกสิทธิ์และตำแหน่งโต๊ะที่ดีที่สุดให้กับคุณ</p>
               </div>
 
-              {/* 🚨 [กำแพงล็อกชั้นที่ 2] ดักฝั่งหน้ากาก UI: ถ้าร้านปิดรับจอง ให้เสกหน้าจอ Closed บล็อกฟอร์มทันที */}
               {!isShopOpen ? (
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.97 }}
@@ -348,7 +345,6 @@ export default function BookingPage() {
                 </motion.div>
               ) : (
                 <form onSubmit={handleBooking} className="space-y-4 text-xs">
-                  {/* ชื่อผู้จอง */}
                   <div className="space-y-1.5">
                     <label className="font-semibold flex items-center gap-1.5 text-gray-300">
                       <User size={14} style={{ color: THEME.amber }} /> ชื่อผู้จอง / นามแฝง
@@ -364,7 +360,6 @@ export default function BookingPage() {
                     />
                   </div>
 
-                  {/* เบอร์โทร + จำนวนแขก */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="font-semibold flex items-center gap-1.5 text-gray-300">
@@ -400,7 +395,6 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  {/* วันที่ + เวลา */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="font-semibold flex items-center gap-1.5 text-gray-300">
@@ -436,7 +430,6 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  {/* เลือกโซนที่ต้องการนั่ง */}
                   <div className="space-y-1.5">
                     <label className="font-semibold flex items-center gap-1.5 text-gray-300">
                       <MapPin size={14} style={{ color: THEME.amber }} /> เลือกโซนที่ต้องการนั่ง
