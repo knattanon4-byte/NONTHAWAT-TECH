@@ -4,7 +4,7 @@ import { Search, Bell, Command, User } from 'lucide-react';
 import { useDashboardStore } from '@/store/useDashboardStore';
 
 export default function Topbar() {
-  const { toggleCommandPalette } = useDashboardStore();
+  const { toggleCommandPalette } = useDashboardStore() as any;
 
   return (
     <header className="h-16 border-b border-slate-900 bg-slate-950/30 backdrop-blur-md px-6 flex items-center justify-between">

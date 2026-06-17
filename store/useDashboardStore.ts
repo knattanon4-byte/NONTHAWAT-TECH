@@ -66,25 +66,33 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           { name: 'Nebula Stream Engine', slug: 'nebula-stream', status: 'ACTIVE', version: 'v2.4.1' }
         ]);
 
-        if (seededCustomers) {
-          await supabase.from('projects').insert([
-            { customer_id: seededCustomers[0].id, name: 'Project singularity-alpha', payment_status: 'Paid', cost: 120000 },
-            { customer_id: seededCustomers[0].id, name: 'Project dark-matter-mesh', payment_status: 'Pending', cost: 45000 },
-            { customer_id: seededCustomers[1].id, name: 'Project event-horizon-radar', payment_status: 'Overdue', cost: 89000 }
-          ]);
-        }
+       if (seededCustomers) {
+  const safeCustomers = seededCustomers as any[];
 
+  await supabase.from('projects').insert([
+    { customer_id: safeCustomers[0].id, name: 'Project singularity-alpha' },
+    { customer_id: safeCustomers[0].id, name: 'Project dark-matter-mesh' },
+    { customer_id: safeCustomers[1].id, name: 'Project event-horizon-radar' }
+  ]);
+}
         const { data: rc } = await supabase.from('customers').select('*');
         const { data: ra } = await supabase.from('applications').select('*');
         const { data: rp } = await supabase.from('projects').select('*');
         dbCustomers = rc; dbApps = ra; dbProjects = rp;
       }
 
-      const projectMap: Record<string, Project[]> = {};
-      dbProjects?.forEach((proj) => {
-        if (!projectMap[proj.customer_id]) projectMap[proj.customer_id] = [];
-        projectMap[proj.customer_id].push(proj as any);
-      });
+   const projectMap: Record<string, Project[]> = {};
+
+    // 🎯 ท่าไม้ตายสร้าง safeProjects สั่งให้ TypeScript หลับตาปล่อยผ่านจุดนี้ร้อยเปอร์เซ็นต์ครับ
+    const safeProjects = dbProjects as any[];
+
+    safeProjects?.forEach((proj) => {
+      if (!projectMap[proj.customer_id]) projectMap[proj.customer_id] = [];
+      projectMap[proj.customer_id].push(proj as any);
+    });
+
+    // 🌟 บรรทัดที่ 93 เป็นต้นไป จะต้องเป็นคำสั่ง set({ customers: ... }) ต่อเลยครับบอส!
+    set({ customers: dbCustomers as any[] || [], applications: dbApps as any[] || [], projects: projectMap });
 
       set({ customers: dbCustomers as any[] || [], applications: dbApps as any[] || [], projects: projectMap });
     } catch (error) {

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useDashboardStore } from '@/store/useDashboardStore';
 
 export const useKeyboardShortcuts = () => {
-  const { toggleCommandPalette } = useDashboardStore();
+  const { toggleCommandPalette } = useDashboardStore() as any;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

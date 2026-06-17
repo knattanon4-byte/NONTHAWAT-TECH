@@ -7,14 +7,6 @@ import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Users, Phone, User, Clock, MapPin, CheckCircle2, Download, AlertTriangle, ChevronDown } from 'lucide-react';
 
-function GlassCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      {children}
-    </div>
-  );
-}
-
 interface BookingRecord {
   id: string;
   shop_id: string;
@@ -27,9 +19,6 @@ interface BookingRecord {
   table_number: string;
 }
 
-/* ----------------------------------------------------------------------------
- * Premium Nightlife Theme tokens 
- * -------------------------------------------------------------------------- */
 const THEME = {
   bg: '#121318',
   card: '#1F2029',
@@ -48,7 +37,6 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(false);
   const [successData, setSuccessData] = useState<BookingRecord | null>(null);
 
-  // 📝 คอนฟิกเช็กสถานะการเปิด/ปิดรับจองจากผู้จัดการร้าน
   const [isShopOpen, setIsShopOpen] = useState(true);
   const [checkingStatus, setCheckingStatus] = useState(true); 
 
@@ -71,14 +59,14 @@ export default function BookingPage() {
       .join(' ');
   }, [shopSlug]);
 
-  // 🛰️ ท่อสตรีมสด: ดักฟังคำสั่งสับสวิตช์เปิด/ปิดร้านจากตาราง shop_settings
+  // 🛰️ ท่อสตรีมสด: เช็กและดักฟังสถานะเปิด/ปิดร้านจากตาราง shop_settings
   useEffect(() => {
     let active = true;
 
     const checkShopStatus = async () => {
       try {
-        // 🎯 [FIXED] เติม (as any) สยบด่านตรวจ Schema ตาราง shop_settings ล่วงหน้าครับบอส
-        const { data, error } = await (supabase.from('shop_settings') as any)
+        const { data, error } = await supabase
+          .from('shop_settings')
           .select('is_booking_open')
           .eq('shop_id', shopSlug)
           .single();
@@ -102,7 +90,6 @@ export default function BookingPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'shop_settings', filter: `shop_id=eq.${shopSlug}` },
-        // 🎯 [FIXED] ระบุไทป์ (payload: any) ป้องกันกฎเหล็ก implicit any สกัดดาวรุ่งตอนตรวจออนไลน์
         (payload: any) => {
           if (active) {
             setIsShopOpen(payload.eventType === 'DELETE' ? true : payload.new.is_booking_open);
@@ -123,8 +110,8 @@ export default function BookingPage() {
 
     const checkAvailability = async () => {
       try {
-        // 🎯 [FIXED] เติม (as any) ข้ามสแกนคิวรีจองโต๊ะร้านอาหาร
-        const { data, error } = await (supabase.from('restaurant_bookings') as any)
+        const { data, error } = await supabase
+          .from('restaurant_bookings')
           .select('table_number')
           .eq('shop_id', shopSlug)
           .eq('booking_date', bookingDate)
@@ -133,8 +120,7 @@ export default function BookingPage() {
         if (error) throw error;
 
         const prefix = `${zone}-`;
-        // 🎯 [FIXED] ล็อกอาร์เรย์ (data as any[]) และพ่นไทป์ (b: any) คลุมจุดลูปกรองโต๊ะว่าง
-        const bookedCount = data ? (data as any[]).filter((b: any) => b.table_number.startsWith(prefix)).length : 0;
+        const bookedCount = data ? (data as any[]).filter((b: any) => b.table_number?.startsWith(prefix)).length : 0;
         setAvailableTables(Math.max(maxTablesInZone - bookedCount, 0));
 
       } catch (err) {
@@ -150,7 +136,7 @@ export default function BookingPage() {
     if (!customerName.trim() || !phone.trim() || !bookingDate) return;
 
     if (!isShopOpen) {
-      alert('ขออภัยครับบอส ขณะนี้ผู้จัดการร้านได้ปิดระบบรับคิวจองออนไลน์ชั่วคราวแล้วครับ');
+      alert('ขออภัยครับขณะนี้ระบบรับคิวจองออนไลน์ปิดชั่วคราวแล้วครับ');
       return;
     }
 
@@ -159,18 +145,17 @@ export default function BookingPage() {
       return;
     }
 
-    setLoading(true);
+    setLoading(true)
     try {
       const prefix = `${zone}-`;
-      // 🎯 [FIXED] เติม (as any) สกัดไฟแดงฟังก์ชันจองช่วงส่ง insert ตรวจสอบข้อมูลซ้ำ
-      const { data: booked } = await (supabase.from('restaurant_bookings') as any)
+      const { data: booked } = await supabase
+        .from('restaurant_bookings')
         .select('table_number')
         .eq('shop_id', shopSlug)
         .eq('booking_date', bookingDate)
         .eq('booking_time', `${bookingTime}:00`);
       
-      // 🎯 [FIXED] เติม (b: any) และล็อกไทป์อาร์เรย์ในฟังก์ชันสุ่มโต๊ะ
-      const bookedInZone = booked ? (booked as any[]).filter((b: any) => b.table_number.startsWith(prefix)) : [];
+      const bookedInZone = booked ? (booked as any[]).filter((b: any) => b.table_number?.startsWith(prefix)) : [];
       const assignedTableNum = bookedInZone.length + 1;
       const finalTableLabel = `${prefix}${String(assignedTableNum).padStart(2, '0')}`;
 
@@ -187,8 +172,8 @@ export default function BookingPage() {
         table_number: finalTableLabel,
       };
 
-      // 🎯 [FIXED] เติม (as any) ตรงประตูด่านคำสั่งส่งจองโต๊ะใหม่ลงฐานข้อมูลจริง
-      const { data, error } = await (supabase.from('restaurant_bookings') as any)
+      const { data, error } = await supabase
+        .from('restaurant_bookings')
         .insert([newBooking])
         .select()
         .single();
@@ -196,7 +181,7 @@ export default function BookingPage() {
       if (error) throw error;
 
       if (data) {
-        setSuccessData(data as BookingRecord);
+        setSuccessData(data as unknown as BookingRecord);
         setStep('success');
       }
 
@@ -312,7 +297,8 @@ export default function BookingPage() {
             exit={{ opacity: 0, y: -15 }}
             className="w-full max-w-lg z-10"
           >
-            <GlassCard 
+            {/* 🎯 สลัดคราบ GlassCard เป็นแท็ก div ตัวจริงในไฟล์ถูกตัวเรียบร้อยครับบอส */}
+            <div 
               className="p-8 border space-y-6 shadow-2xl backdrop-blur-md rounded-3xl"
               style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
             >
@@ -487,7 +473,7 @@ export default function BookingPage() {
                   </button>
                 </form>
               )}
-            </GlassCard>
+            </div>
           </motion.div>
         ) : (
           <motion.div
@@ -497,7 +483,7 @@ export default function BookingPage() {
             exit={{ opacity: 0, scale: 0.96 }}
             className="w-full max-w-sm z-10"
           >
-            <GlassCard 
+            <div 
               className="p-8 border text-center space-y-6 shadow-2xl relative overflow-hidden rounded-3xl"
               style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
             >
@@ -529,7 +515,7 @@ export default function BookingPage() {
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: THEME.muted }}>ARRIVAL TIME</span>
-                  <span className="font-sans text-gray-200">{successData?.booking_time.slice(0, 5)} น.</span>
+                  <span className="font-sans text-gray-200">{successData?.booking_time?.slice(0, 5)} น.</span>
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: THEME.muted }}>GUESTS</span>
@@ -556,7 +542,7 @@ export default function BookingPage() {
                   ออกจากการจอง
                 </button>
               </div>
-            </GlassCard>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

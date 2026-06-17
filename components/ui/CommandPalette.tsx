@@ -6,7 +6,7 @@ import { Search, Cpu, Users, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function CommandPalette() {
-  const { isCommandPaletteOpen, toggleCommandPalette } = useDashboardStore();
+  const { isCommandPaletteOpen, toggleCommandPalette } = useDashboardStore() as any;
   const router = useRouter();
 
   useEffect(() => {

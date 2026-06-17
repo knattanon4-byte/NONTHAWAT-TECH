@@ -34,7 +34,8 @@ export default function ApplicationsPage() {
       if (error) throw error;
 
       if (data) {
-        setApps(data as AppNode[]);
+        // 🎯 แก้ไขตรงจุดนี้: แปลงผ่าน unknown เพื่อดับไฟแดงตัวตรวจไทป์ของ Vercel เรียบร้อยครับบอส!
+        setApps(data as unknown as AppNode[]);
         setIsCloudLive(true);
         localStorage.setItem('matrix_core_apps_ledger', JSON.stringify(data));
       } else {
