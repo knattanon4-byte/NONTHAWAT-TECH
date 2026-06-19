@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, notFound } from 'next/navigation'; // 👈 เลขาเพิ่ม notFound ตรงนี้ครับบอส
+import { useParams, notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -39,7 +39,7 @@ export default function BookingPage() {
 
   const [isShopOpen, setIsShopOpen] = useState(true);
   const [checkingStatus, setCheckingStatus] = useState(true); 
-  const [shopExists, setShopExists] = useState(true); // 👈 1. เลขาเพิ่ม State เช็กการมีอยู่ของร้านค้าตรงนี้ครับ
+  const [shopExists, setShopExists] = useState(true);
 
   // Form States
   const [customerName, setCustomerName] = useState('');
@@ -72,7 +72,6 @@ export default function BookingPage() {
           .eq('shop_id', shopSlug)
           .single();
         
-        // 👈 2. ดักจับตรงนี้: ถ้าคิวรีแล้วขึ้นโค้ด PGRST116 แปลว่าไม่พบชื่อร้านนี้ในฐานข้อมูลเลย (พิมพ์มั่วมา)
         if (error && error.code === 'PGRST116') {
           if (active) setShopExists(false);
           return;
@@ -281,7 +280,6 @@ export default function BookingPage() {
     doc.save(`SLIP-${successData.booking_code}.pdf`);
   };
 
-  // 👈 3. ดักคอไม้ตายสุดท้าย: ถ้าตรวจแล้วร้านไม่มีอยู่จริงใน Supabase สั่งดีดหน้าจอไปหน้า 404 สากลทันที
   if (!shopExists) {
     return notFound();
   }
@@ -307,10 +305,11 @@ export default function BookingPage() {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
-            className="w-full max-w-lg z-10"
+            className="w-full max-w-lg z-10 flex justify-center"
           >
+            {/* 🛠️ แก้ไขจุดที่ 1: เปลี่ยนมาใช้ p-5 สำหรับมือถือ และขยายกว้างเต็มอัตราศึก w-full */}
             <div 
-              className="p-8 border space-y-6 shadow-2xl backdrop-blur-md rounded-3xl"
+              className="p-5 sm:p-8 border space-y-6 shadow-2xl backdrop-blur-md rounded-3xl w-full max-w-md sm:max-w-lg"
               style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
             >
               <div className="text-center space-y-1.5">
@@ -318,7 +317,7 @@ export default function BookingPage() {
                   {formattedShopName}
                 </span>
                 <h1 className="text-2xl font-bold tracking-tight text-white">จองโต๊ะอาหารล่วงหน้า</h1>
-                <p className="text-xs" style={{ color: THEME.muted }}>กรอกข้อมูลเพื่อทำการล็อกสิทธิ์และตำแหน่งโต๊ะที่ดีที่สุดให้กับคุณ</p>
+                <p className="text-xs px-2" style={{ color: THEME.muted }}>กรอกข้อมูลเพื่อทำการล็อกสิทธิ์และตำแหน่งโต๊ะที่ดีที่สุดให้กับคุณ</p>
               </div>
 
               {!isShopOpen ? (
@@ -341,8 +340,8 @@ export default function BookingPage() {
                   </div>
                 </motion.div>
               ) : (
-                <form onSubmit={handleBooking} className="space-y-4 text-xs">
-                  <div className="space-y-1.5">
+                <form onSubmit={handleBooking} className="space-y-4 text-xs w-full">
+                  <div className="space-y-1.5 w-full">
                     <label className="font-semibold flex items-center gap-1.5 text-gray-300">
                       <User size={14} style={{ color: THEME.amber }} /> ชื่อผู้จอง / นามแฝง
                     </label>
@@ -352,13 +351,13 @@ export default function BookingPage() {
                       placeholder="กรอกชื่อและนามสกุลของคุณ..."
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full bg-black/20 border rounded-xl px-4 py-2.5 text-white outline-none focus:border-amber-400 transition-all text-xs"
+                      className="w-full bg-black/20 border rounded-xl px-4 py-2.5 text-white outline-none focus:border-amber-400 transition-all text-xs block min-w-0"
                       style={{ borderColor: THEME.border }}
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                    <div className="space-y-1.5 w-full">
                       <label className="font-semibold flex items-center gap-1.5 text-gray-300">
                         <Phone size={14} style={{ color: THEME.amber }} /> เบอร์โทรศัพท์ติดต่อ
                       </label>
@@ -368,16 +367,16 @@ export default function BookingPage() {
                         placeholder="08X-XXX-XXXX"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full bg-black/20 border rounded-xl px-4 py-2.5 text-white outline-none focus:border-amber-400 transition-all text-xs"
+                        className="w-full bg-black/20 border rounded-xl px-4 py-2.5 text-white outline-none focus:border-amber-400 transition-all text-xs block min-w-0"
                         style={{ borderColor: THEME.border }}
                       />
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 w-full">
                       <label className="font-semibold flex items-center gap-1.5 text-gray-300">
                         <Users size={14} style={{ color: THEME.amber }} /> จำนวนผู้ร่วมโต๊ะ
                       </label>
-                      <div className="relative flex items-center rounded-xl border bg-black/20" style={{ borderColor: THEME.border }}>
+                      <div className="relative flex items-center rounded-xl border bg-black/20 w-full" style={{ borderColor: THEME.border }}>
                         <select
                           value={guestsCount}
                           onChange={(e) => setGuestsCount(Number(e.target.value))}
@@ -392,27 +391,28 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                    <div className="space-y-1.5 w-full min-w-0">
                       <label className="font-semibold flex items-center gap-1.5 text-gray-300">
                         <Calendar size={14} style={{ color: THEME.amber }} /> เลือกวันที่
                       </label>
+                      {/* 🛠️ แก้ไขจุดที่ 2: เพิ่มคิวคอมโบ block min-w-0 ล็อกขอบเขต Input วันที่ให้ตรงเป๊ะไม่ขยายล้น */}
                       <input
                         type="date"
                         required
                         min={new Date().toISOString().split('T')[0]}
                         value={bookingDate}
                         onChange={(e) => setBookingDate(e.target.value)}
-                        className="w-full bg-black/20 border rounded-xl px-4 py-2.5 text-white outline-none focus:border-amber-400 transition-all text-xs color-scheme-dark"
+                        className="w-full bg-black/20 border rounded-xl px-4 py-2.5 text-white outline-none focus:border-amber-400 transition-all text-xs color-scheme-dark block min-w-0 box-sizing-border"
                         style={{ borderColor: THEME.border }}
                       />
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 w-full">
                       <label className="font-semibold flex items-center gap-1.5 text-gray-300">
                         <Clock size={14} style={{ color: THEME.amber }} /> ระบุเวลาเข้าโต๊ะ
                       </label>
-                      <div className="relative flex items-center rounded-xl border bg-black/20" style={{ borderColor: THEME.border }}>
+                      <div className="relative flex items-center rounded-xl border bg-black/20 w-full" style={{ borderColor: THEME.border }}>
                         <select
                           value={bookingTime}
                           onChange={(e) => setBookingTime(e.target.value)}
@@ -427,11 +427,12 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 w-full">
                     <label className="font-semibold flex items-center gap-1.5 text-gray-300">
                       <MapPin size={14} style={{ color: THEME.amber }} /> เลือกโซนที่ต้องการนั่ง
                     </label>
-                    <div className="grid grid-cols-3 gap-2">
+                    {/* 🛠️ แก้ไขจุดที่ 3: สับคลาสจาก grid-cols-3 เป็น grid-cols-1 เพื่อขยายหน้าปุ่มแนวตั้งบนมือถือไม่ให้เบียดกัน */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full">
                       {[
                         { id: 'A', name: 'โซนห้องแอร์', desc: 'Aircon Area', color: '#8B9DFF' },
                         { id: 'G', name: 'สวนระเบียง', desc: 'Garden Terrace', color: THEME.mint },
@@ -443,13 +444,13 @@ export default function BookingPage() {
                             key={z.id}
                             type="button"
                             onClick={() => setZone(z.id as any)}
-                            className="p-3 rounded-xl border text-center transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5"
+                            className="p-3 rounded-xl border text-center transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5 w-full"
                             style={{
                               backgroundColor: isSelected ? `${z.color}15` : 'rgba(0,0,0,0.15)',
                               borderColor: isSelected ? z.color : THEME.border,
                             }}
                           >
-                            <p className="font-sans text-[11px] font-bold" style={{ color: isSelected ? '#FFFFFF' : THEME.muted }}>{z.name}</p>
+                            <p className="font-sans text-[11px] font-bold" style={{ color: isSelected ? '#FFFFFF' : THEME.text }}>{z.name}</p>
                             <p className="text-[9px] font-mono opacity-60 mt-0.5" style={{ color: isSelected ? z.color : THEME.muted }}>{z.desc}</p>
                           </button>
                         );
@@ -458,16 +459,16 @@ export default function BookingPage() {
                   </div>
 
                   {bookingDate && (
-                    <div className={`p-3 rounded-xl border flex items-center justify-between font-mono text-[10px] ${
+                    <div className={`p-3 rounded-xl border flex items-center justify-between font-mono text-[10px] w-full ${
                       availableTables > 0 
                         ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
                         : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
                     }`}>
                       <span className="flex items-center gap-1 font-bold">
                         <CheckCircle2 size={12} /> 
-                        {availableTables > 0 ? 'STATUS: AVAILABLE NODES' : 'STATUS: OVERFLOW CAPACITIES'}
+                        {availableTables > 0 ? 'STATUS: AVAILABLE' : 'STATUS: OVERFLOW'}
                       </span>
-                      <span className="font-bold">เหลือว่าง {availableTables} โต๊ะในระบบ</span>
+                      <span className="font-bold">เหลือว่าง {availableTables} โต๊ะ</span>
                     </div>
                   )}
 
@@ -561,6 +562,9 @@ export default function BookingPage() {
       <style jsx global>{`
         .color-scheme-dark {
           color-scheme: dark;
+        }
+        .box-sizing-border {
+          box-sizing: border-box;
         }
       `}</style>
     </div>
