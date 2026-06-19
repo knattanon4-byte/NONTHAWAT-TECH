@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, notFound } from 'next/navigation'; // 👈 1. เลขาเพิ่ม notFound ตรงนี้ครับบอส
 import { supabase } from '@/lib/supabase/client';
 import type { RestaurantBooking } from '@/types/database';
 import {
@@ -104,6 +104,7 @@ export default function MonitorPage() {
   
   // 📝 สวิตช์คอนฟิกเปิด/ปิดรับจองของหน้าร้าน
   const [isBookingOpen, setIsBookingOpen] = useState(true);
+  const [shopExists, setShopExists] = useState(true); // 👈 2. เลขาเพิ่มระบบล็อก State ความมีอยู่ของร้านค้าตรงนี้ครับ
 
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportForm, setReportForm] = useState({ issueType: 'ระบบจองขัดข้อง', details: '' });
@@ -179,7 +180,13 @@ export default function MonitorPage() {
           .eq('shop_id', shopSlug)
           .single();
 
-        if (settingsError && settingsError.code !== 'PGRST116') throw settingsError;
+        // 👈 3. จุดยุทธศาสตร์ดักคอ: ถ้า Supabase บอกว่าไม่เจอร้านนี้เลย (PGRST116) สั่งเปลี่ยนสถานะร้านค้าเป็นไม่มีจริงทันที
+        if (settingsError && settingsError.code === 'PGRST116') {
+          if (active) setShopExists(false);
+          return;
+        }
+
+        if (settingsError) throw settingsError;
 
         if (active && data) {
           setIsBookingOpen(data.is_booking_open);
@@ -358,6 +365,11 @@ export default function MonitorPage() {
       setIsSendingReport(false);
     }
   };
+
+  // 👈 4. ไม้ตายสั่งดีดหน้าจอ: ถ้าตรวจเจอรหัสร้านเถื่อนหรือพิมพ์มั่วมา สั่งดีดไปหน้า 404 สากลทันที!
+  if (!shopExists) {
+    return notFound();
+  }
 
   return (
     <div
