@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, notFound } from 'next/navigation'; // 👈 เลขาเพิ่ม notFound ตรงนี้ครับบอส
 import { supabase } from '@/lib/supabase/client';
 import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -39,6 +39,7 @@ export default function BookingPage() {
 
   const [isShopOpen, setIsShopOpen] = useState(true);
   const [checkingStatus, setCheckingStatus] = useState(true); 
+  const [shopExists, setShopExists] = useState(true); // 👈 1. เลขาเพิ่ม State เช็กการมีอยู่ของร้านค้าตรงนี้ครับ
 
   // Form States
   const [customerName, setCustomerName] = useState('');
@@ -71,7 +72,13 @@ export default function BookingPage() {
           .eq('shop_id', shopSlug)
           .single();
         
-        if (error && error.code !== 'PGRST116') throw error;
+        // 👈 2. ดักจับตรงนี้: ถ้าคิวรีแล้วขึ้นโค้ด PGRST116 แปลว่าไม่พบชื่อร้านนี้ในฐานข้อมูลเลย (พิมพ์มั่วมา)
+        if (error && error.code === 'PGRST116') {
+          if (active) setShopExists(false);
+          return;
+        }
+
+        if (error) throw error;
 
         if (active) {
           setIsShopOpen(data ? data.is_booking_open : true);
@@ -274,6 +281,11 @@ export default function BookingPage() {
     doc.save(`SLIP-${successData.booking_code}.pdf`);
   };
 
+  // 👈 3. ดักคอไม้ตายสุดท้าย: ถ้าตรวจแล้วร้านไม่มีอยู่จริงใน Supabase สั่งดีดหน้าจอไปหน้า 404 สากลทันที
+  if (!shopExists) {
+    return notFound();
+  }
+
   return (
     <div 
       className="min-h-screen w-full font-sans select-none flex items-center justify-center p-4 relative overflow-hidden transition-colors duration-300"
@@ -297,7 +309,6 @@ export default function BookingPage() {
             exit={{ opacity: 0, y: -15 }}
             className="w-full max-w-lg z-10"
           >
-            {/* 🎯 สลัดคราบ GlassCard เป็นแท็ก div ตัวจริงในไฟล์ถูกตัวเรียบร้อยครับบอส */}
             <div 
               className="p-8 border space-y-6 shadow-2xl backdrop-blur-md rounded-3xl"
               style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
