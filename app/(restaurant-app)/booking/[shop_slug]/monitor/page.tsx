@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, notFound } from 'next/navigation'; // 👈 1. เลขาเพิ่ม notFound ตรงนี้ครับบอส
+import { useParams, notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import type { RestaurantBooking } from '@/types/database';
 import {
@@ -87,7 +87,6 @@ export default function MonitorPage() {
   const params = useParams<{ shop_slug: string }>();
   const shopSlug = (params?.shop_slug as string) || 'default-shop';
 
-  // 👑 ดักลอจิกเปลี่ยนชื่อร้าน: แปลงร่างจาก DEFAULT SHOP เป็น LOVE RESTAURANT ทันทีตามสั่งครับบอส
   const shopName = useMemo(() => {
     if (shopSlug === 'default-shop') return 'LOVE RESTAURANT';
     return shopSlug.split('-').map((w) => w.toUpperCase()).join(' ');
@@ -102,15 +101,14 @@ export default function MonitorPage() {
   const [zone, setZone] = useState<ZoneId>('ALL');
   const [showPast, setShowPast] = useState(false);
   
-  // 📝 สวิตช์คอนฟิกเปิด/ปิดรับจองของหน้าร้าน
   const [isBookingOpen, setIsBookingOpen] = useState(true);
-  const [shopExists, setShopExists] = useState(true); // 👈 2. เลขาเพิ่มระบบล็อก State ความมีอยู่ของร้านค้าตรงนี้ครับ
+  const [shopExists, setShopExists] = useState(true);
 
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportForm, setReportForm] = useState({ issueType: 'ระบบจองขัดข้อง', details: '' });
   const [isSendingReport, setIsSendingReport] = useState(false);
 
-  // 🛰️ ท่อสตรีมสดที่ 1: ดักจับรายการจองโต๊ะอาหาร
+  // 🛰️ ท่อสตรีมสดที่ 1: ดักจับรายการจองโต๊ะอาหาร (อัปเกรดระบบประมวลผล Payload ตรงๆ ไม่ดึงเบสซ้ำ)
   useEffect(() => {
     let active = true;
 
@@ -156,8 +154,35 @@ export default function MonitorPage() {
           table: 'restaurant_bookings',
           filter: `shop_id=eq.${shopSlug}`,
         },
-        () => {
-          loadData();
+        (payload) => {
+          if (!active) return;
+          console.log('Realtime Event Detected:', payload);
+
+          // 🎯 ไม้ตายยิงข้อมูลสดเข้าหน้าจอผู้ใช้ตรงๆ ไม่โหลดซ้ำให้หน่วงคอขวด
+          setBookings((prev) => {
+            if (payload.eventType === 'INSERT') {
+              const updated = [...prev, payload.new];
+              return updated.sort((a, b) => {
+                if (a.booking_date !== b.booking_date) return a.booking_date.localeCompare(b.booking_date);
+                return (a.booking_time || '').localeCompare(b.booking_time || '');
+              });
+            }
+            if (payload.eventType === 'UPDATE') {
+              return prev.map((item) => (item.id === payload.new.id ? { ...item, ...payload.new } : item));
+            }
+            if (payload.eventType === 'DELETE') {
+              return prev.filter((item) => item.id === payload.old.id);
+            }
+            return prev;
+          });
+
+          setLastSync(
+            new Date().toLocaleTimeString('en-GB', {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            })
+          );
         }
       )
       .subscribe();
@@ -168,7 +193,7 @@ export default function MonitorPage() {
     };
   }, [shopSlug]);
 
-  // 🛰️ ท่อสตรีมสดที่ 2: ดักจับสวิตช์เปิด/ปิดร้านจากตาราง shop_settings ยิงข้ามระบบแบบ Realtime
+  // 🛰️ ท่อสตรีมสดที่ 2: ดักจับสวิตช์เปิด/ปิดร้านจากตาราง shop_settings
   useEffect(() => {
     let active = true;
 
@@ -180,7 +205,6 @@ export default function MonitorPage() {
           .eq('shop_id', shopSlug)
           .single();
 
-        // 👈 3. จุดยุทธศาสตร์ดักคอ: ถ้า Supabase บอกว่าไม่เจอร้านนี้เลย (PGRST116) สั่งเปลี่ยนสถานะร้านค้าเป็นไม่มีจริงทันที
         if (settingsError && settingsError.code === 'PGRST116') {
           if (active) setShopExists(false);
           return;
@@ -220,7 +244,6 @@ export default function MonitorPage() {
     };
   }, [shopSlug]);
 
-  // 🛠️ แก้บั๊กพาร์ทอัปเดตสเตตัสด้วยการครอบไทป์หลบสายตา TypeScript คอมไพเลอร์ครับบอส
   const handleUpdateStatus = async (bookingId: string, nextStatus: 'checked_in' | 'no_show') => {
     try {
       const { error: patchError } = await (supabase.from('restaurant_bookings') as any)
@@ -234,7 +257,6 @@ export default function MonitorPage() {
     }
   };
 
-  // 🔴 🟢 ฟังก์ชันสำหรับให้ผู้จัดการกดสับสวิตช์สั่งการเปิด-ปิดคิวออนไลน์
   const handleToggleBookingStatus = async () => {
     const nextState = !isBookingOpen;
     setIsBookingOpen(nextState);
@@ -366,7 +388,6 @@ export default function MonitorPage() {
     }
   };
 
-  // 👈 4. ไม้ตายสั่งดีดหน้าจอ: ถ้าตรวจเจอรหัสร้านเถื่อนหรือพิมพ์มั่วมา สั่งดีดไปหน้า 404 สากลทันที!
   if (!shopExists) {
     return notFound();
   }
@@ -632,9 +653,6 @@ export default function MonitorPage() {
   );
 }
 
-/* ----------------------------------------------------------------------------
- * Sub Components
- * -------------------------------------------------------------------------- */
 function StatPill({ icon: Icon, label, value, accent }: { icon: LucideIcon; label: string; value: number; accent: string }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl px-4 py-3.5" style={{ backgroundColor: THEME.card, border: `1px solid ${THEME.border}` }}>
