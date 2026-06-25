@@ -17,7 +17,6 @@ import {
   Radio, 
   ShieldAlert, 
   Building2, 
-  Inbox,
   Layers
 } from 'lucide-react';
 
@@ -110,7 +109,9 @@ export default function IntegratedApplicationsPage() {
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        if (telemetryActive) setReports(data ?? []);
+        
+        // 🎯 แก้จุดนี้: บังคับแคสต์ไทป์เป็น any[] ดับไฟแดงประหารบน Vercel บรรทัดที่ 113 เรียบร้อยครับบอส!
+        if (telemetryActive) setReports((data as any[]) ?? []);
       } catch (err) {
         console.error('Failed to load telemetry logs:', err);
       } finally {
@@ -385,7 +386,7 @@ export default function IntegratedApplicationsPage() {
                 </p>
               ) : reports.length === 0 ? (
                 <div className="border border-dashed border-slate-900 rounded-xl p-12 text-center">
-                  <CheckCircle className="mx-auto text-emerald-400 mb-2" size={24} />
+                  <ShieldCheck className="mx-auto text-emerald-400 mb-2" size={24} />
                   <p className="text-xs font-mono text-slate-400">All client terminals operating normally. Zero reports captured.</p>
                 </div>
               ) : (
