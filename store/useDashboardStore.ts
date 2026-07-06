@@ -83,7 +83,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
    const projectMap: Record<string, Project[]> = {};
 
-    // 🎯 ท่าไม้ตายสร้าง safeProjects สั่งให้ TypeScript หลับตาปล่อยผ่านจุดนี้ร้อยเปอร์เซ็นต์ครับ
+    
     const safeProjects = dbProjects as any[];
 
     safeProjects?.forEach((proj) => {
@@ -91,7 +91,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       projectMap[proj.customer_id].push(proj as any);
     });
 
-    // 🌟 บรรทัดที่ 93 เป็นต้นไป จะต้องเป็นคำสั่ง set({ customers: ... }) ต่อเลยครับบอส!
+   
     set({ customers: dbCustomers as any[] || [], applications: dbApps as any[] || [], projects: projectMap });
 
       set({ customers: dbCustomers as any[] || [], applications: dbApps as any[] || [], projects: projectMap });

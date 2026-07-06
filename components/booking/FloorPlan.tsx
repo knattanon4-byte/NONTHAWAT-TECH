@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client' 
+// 📥ดึงระบบควบคุมการซูมและลากระดับโปรเข้ามาใช้งาน
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 
 interface TableData {
   id: string;
@@ -12,6 +14,73 @@ interface FloorPlanProps {
   selectedTable: string | null;
   setSelectedTable: (tableId: string | null) => void;
 }
+
+// คลังพิกัดเก้าอี้ทั้ง 62 ตัวของบอส (อยู่ครบถ้วนร้อยเปอร์เซ็นต์ครับ)
+const RESTAURANT_TABLES = [
+  { id: '44', label: '44', cx: 13, cy: 227 },
+  { id: '42', label: '42', cx: 35, cy: 227 },
+  { id: '40', label: '40', cx: 58, cy: 227 },
+  { id: '38', label: '38', cx: 81, cy: 227 },
+  { id: '36', label: '36', cx: 104, cy: 227 },
+  { id: '45', label: '45', cx: 13, cy: 251 },
+  { id: '43', label: '43', cx: 35, cy: 251 },
+  { id: '41', label: '41', cx: 58, cy: 251 },
+  { id: '39', label: '39', cx: 81, cy: 251 },
+  { id: '37', label: '37', cx: 104, cy: 251 },
+  { id: 'B3', label: 'B3', cx: 61, cy: 279 },
+  { id: 'B2', label: 'B2', cx: 85, cy: 279 },
+  { id: 'B1', label: 'B1', cx: 110, cy: 279 },
+  { id: 'R7', label: 'R7', cx: 61, cy: 312 },
+  { id: 'R6', label: 'R6', cx: 85, cy: 313 },
+  { id: 'R5', label: 'R5', cx: 110, cy: 312 },
+  { id: 'R8', label: 'R8', cx: 43, cy: 361 },
+  { id: '29', label: '29', cx: 78, cy: 378 },
+  { id: '25', label: '25', cx: 108, cy: 380 },
+  { id: '33', label: '33', cx: 48, cy: 407 },
+  { id: '34', label: '34', cx: 48, cy: 432 },
+  { id: '35', label: '35', cx: 48, cy: 457 },
+  { id: '30', label: '30', cx: 78, cy: 407 },
+  { id: '31', label: '31', cx: 78, cy: 432 },
+  { id: '32', label: '32', cx: 78, cy: 457 },
+  { id: '26', label: '26', cx: 108, cy: 407 },
+  { id: '27', label: '27', cx: 108, cy: 432 },
+  { id: '28', label: '28', cx: 108, cy: 457 },
+  { id: '23', label: '23', cx: 131, cy: 432 },
+  { id: '24', label: '24', cx: 131, cy: 457 },
+  { id: 'F1', label: 'F1', cx: 50, cy: 511 },
+  { id: 'F2', label: 'F2', cx: 94, cy: 511 },
+  { id: 'R4', label: 'R4', cx: 170, cy: 460 },
+  { id: 'R3', label: 'R3', cx: 188, cy: 441 },
+  { id: 'R2', label: 'R2', cx: 212, cy: 432 },
+  { id: 'R1', label: 'R1', cx: 238, cy: 438 },
+  { id: '21', label: '21', cx: 139, cy: 313 },
+  { id: '17', label: '17', cx: 164, cy: 313 },
+  { id: '13', label: '13', cx: 189, cy: 313 },
+  { id: '9',  label: '9',  cx: 214, cy: 313 },
+  { id: '5',  label: '5',  cx: 239, cy: 313 },
+  { id: '1',  label: '1',  cx: 264, cy: 313 },
+  { id: '22', label: '22', cx: 139, cy: 337 },
+  { id: '18', label: '18', cx: 164, cy: 336 },
+  { id: '14', label: '14', cx: 189, cy: 336 },
+  { id: '10', label: '10', cx: 214, cy: 336 },
+  { id: '6',  label: '6',  cx: 239, cy: 336 },
+  { id: '2',  label: '2',  cx: 264, cy: 336 },
+  { id: '19', label: '19', cx: 164, cy: 359 },
+  { id: '15', label: '15', cx: 189, cy: 359 },
+  { id: '11', label: '11', cx: 214, cy: 359 },
+  { id: '7',  label: '7',  cx: 239, cy: 359 },
+  { id: '3',  label: '3',  cx: 264, cy: 359 },
+  { id: '20', label: '20', cx: 164, cy: 382 },
+  { id: '16', label: '16', cx: 189, cy: 382 },
+  { id: '12', label: '12', cx: 214, cy: 382 },
+  { id: '8',  label: '8',  cx: 239, cy: 382 },
+  { id: '4',  label: '4',  cx: 264, cy: 382 },
+  { id: 'S5', label: 'S5', cx: 305, cy: 464 },
+  { id: 'S4', label: 'S4', cx: 330, cy: 464 },
+  { id: 'S3', label: 'S3', cx: 355, cy: 464 },
+  { id: 'S2', label: 'S2', cx: 355, cy: 436 },
+  { id: 'S1', label: 'S1', cx: 355, cy: 408 }
+];
 
 export default function FloorPlan({ selectedTable, setSelectedTable }: FloorPlanProps) {
   const [tables, setTables] = useState<Record<string, TableData>>({})
@@ -41,13 +110,14 @@ export default function FloorPlan({ selectedTable, setSelectedTable }: FloorPlan
 
   const getTableStyle = (tableId: string) => {
     const current = tables[tableId]
-    if (!current) return 'fill-slate-800 stroke-slate-700' 
+    if (!current) return 'fill-slate-800 stroke-slate-700 stroke-[0.5px]' 
     if (selectedTable === tableId) return 'fill-sky-400 stroke-white stroke-[2px] animate-pulse cursor-pointer'
 
     switch (current.status) {
       case 'booked': return 'fill-red-500 stroke-red-700 cursor-not-allowed'
       case 'pending': return 'fill-amber-500 stroke-amber-600 animate-pulse'
-      default: return 'fill-emerald-500 hover:fill-emerald-400 stroke-emerald-700 cursor-pointer transition-all'
+      case 'available': return 'fill-emerald-500 hover:fill-emerald-400 stroke-emerald-700 cursor-pointer transition-all'
+      default: return 'fill-slate-600 stroke-slate-500 cursor-not-allowed' 
     }
   }
 
@@ -58,110 +128,182 @@ export default function FloorPlan({ selectedTable, setSelectedTable }: FloorPlan
   }
 
   return (
-    <div className="w-full flex items-center justify-center p-1 bg-slate-950 rounded-2xl overflow-hidden">
-      <svg width="393" height="852" viewBox="0 0 393 852" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <g clipPath="url(#clip0_2002_2)">
-          {/* พื้นหลังแอปปรับเป็นสีมืดเนียนตา */}
-          <rect width="393" height="852" fill="#020617"/>
-          
-          {/* เส้นผนังร้านค้ากำแพงต่างๆ ของบอส */}
-          <line x1="2" y1="197.5" x2="116" y2="197.5" stroke="#334155"/>
-          <line x1="108.5" y1="197" x2="108.5" y2="181" stroke="#334155"/>
-          <line x1="108" y1="180.5" x2="285" y2="180.5" stroke="#334155"/>
-          <line x1="285" y1="202.012" x2="285" y2="181.988" stroke="#334155"/>
-          <line x1="276.5" y1="202.012" x2="276.5" y2="181.988" stroke="#334155"/>
-          <line x1="116.5" y1="181" x2="116.5" y2="268" stroke="#334155"/>
-          <line x1="276" y1="200.5" x2="285" y2="200.5" stroke="#334155"/>
-          <line x1="286" y1="201.5" x2="357" y2="201.5" stroke="#334155"/>
-          <line x1="357.5" y1="201" x2="357.5" y2="294" stroke="#334155"/>
-          <line x1="357.01" y1="292.75" x2="324.998" y2="292.75" stroke="#334155"/>
-          <line x1="325.392" y1="292.31" x2="295.392" y2="330.31" stroke="#334155"/>
-          <line x1="295.5" y1="331" x2="295.5" y2="390" stroke="#334155"/>
-          <line x1="295" y1="389.5" x2="307" y2="389.5" stroke="#334155"/>
-          <line x1="324" y1="389.5" x2="378" y2="389.5" stroke="#334155"/>
-          <line x1="324.5" y1="389" x2="324.5" y2="378" stroke="#334155"/>
-          
-          {/* โต๊ะกลมกลุ่มบนซ้าย (เลขาผูก ID และ style ให้แล้วบอสไล่ดูได้เลยครับ) */}
-          <circle cx="13" cy="227" r="8.5" className={getTableStyle('44')} onClick={() => handleTableClick('44')} />
-          <path className="pointer-events-none" d="M5.99964 230.21V229.341L9.83487 223.273H10.4656V224.619H10.0394L7.14169 229.205V229.273H12.3065V230.21H5.99964ZM10.1076 232V229.946V229.541V223.273H11.1133V232H10.1076ZM13.6989 230.21V229.341L17.5341 223.273H18.1648V224.619H17.7386L14.8409 229.205V229.273H20.0057V230.21H13.6989ZM17.8068 232V229.946V229.541V223.273H18.8125V232H17.8068Z" fill="#fff"/>
-          
-          <circle cx="13" cy="251" r="8.5" className={getTableStyle('45')} onClick={() => handleTableClick('45')} />
-          <path className="pointer-events-none" d="M6.69886 254.21V253.341L10.5341 247.273H11.1648V248.619H10.7386L7.84091 253.205V253.273H13.0057V254.21H6.69886ZM10.8068 256V253.946V253.541V247.273H11.8125V256H10.8068ZM17.3299 256.119C16.8299 256.119 16.3796 256.02 15.979 255.821C15.5785 255.622 15.2575 255.349 15.016 255.003C14.7745 254.656 14.6424 254.261 14.6197 253.818H15.6424C15.6822 254.213 15.8612 254.54 16.1793 254.798C16.5004 255.054 16.8839 255.182 17.3299 255.182C17.6879 255.182 18.006 255.098 18.2844 254.93C18.5657 254.763 18.7859 254.533 18.945 254.24C19.1069 253.945 19.1879 253.611 19.1879 253.239C19.1879 252.858 19.104 252.518 18.9364 252.22C18.7717 251.919 18.5444 251.682 18.2546 251.509C17.9648 251.335 17.6339 251.247 17.2617 251.244C16.9947 251.241 16.7205 251.283 16.4393 251.368C16.158 251.45 15.9265 251.557 15.7447 251.688L14.756 251.568L15.2844 247.273H19.8185V248.21H16.1708L15.864 250.784H15.9151C16.0941 250.642 16.3185 250.524 16.5884 250.43C16.8583 250.337 17.1396 250.29 17.4322 250.29C17.9663 250.29 18.4421 250.418 18.8597 250.673C19.2802 250.926 19.6097 251.273 19.8484 251.713C20.0898 252.153 20.2106 252.656 20.2106 253.222C20.2106 253.778 20.0856 254.276 19.8356 254.713C19.5884 255.148 19.2475 255.491 18.8129 255.744C18.3782 255.994 17.8839 256.119 17.3299 256.119Z" fill="#fff"/>
-          
-          <circle cx="35" cy="251" r="8.5" className={getTableStyle('43')} onClick={() => handleTableClick('43')} />
-          <path className="pointer-events-none" d="M28.0289 254.21V253.341L31.8642 247.273H32.4949V248.619H32.0687L29.171 253.205V253.273H34.3358V254.21H28.0289ZM32.1369 256V253.946V253.541V247.273H33.1426V256H32.1369ZM38.8816 256.119C38.3191 256.119 37.8176 256.023 37.3773 255.83C36.9398 255.636 36.5918 255.368 36.3333 255.024C36.0776 254.678 35.9384 254.276 35.9157 253.818H36.9895C37.0123 254.099 37.1088 254.342 37.2793 254.547C37.4498 254.749 37.6728 254.905 37.9483 255.016C38.2239 255.126 38.5293 255.182 38.8645 255.182C39.2395 255.182 39.5719 255.116 39.8617 254.986C40.1515 254.855 40.3787 254.673 40.5435 254.44C40.7083 254.207 40.7907 253.938 40.7907 253.631C40.7907 253.31 40.7111 253.027 40.552 252.783C40.3929 252.536 40.16 252.342 39.8532 252.203C39.5463 252.064 39.1713 251.994 38.7282 251.994H38.0293V251.057H38.7282C39.0748 251.057 39.3787 250.994 39.6401 250.869C39.9043 250.744 40.1103 250.568 40.258 250.341C40.4086 250.114 40.4838 249.847 40.4838 249.54C40.4838 249.244 40.4185 248.987 40.2878 248.768C40.1571 248.55 39.9725 248.379 39.7338 248.257C39.498 248.135 39.2196 248.074 38.8986 248.074C38.5975 248.074 38.3134 248.129 38.0463 248.24C37.7821 248.348 37.5662 248.506 37.3986 248.713C37.231 248.918 37.1401 249.165 37.1259 249.455H36.1032C36.1202 248.997 36.258 248.597 36.5165 248.253C36.775 247.906 37.1131 247.636 37.5307 247.443C37.9512 247.443 38.4128 247.153 38.9157 247.153C39.4554 247.153 39.9185 247.263 40.3049 247.482C40.6912 247.697 40.9881 247.983 41.1955 248.338C41.4029 248.693 41.5066 249.077 41.5066 249.489C41.5066 249.98 41.3773 250.399 41.1188 250.746C40.8631 251.092 40.5151 251.332 40.0748 251.466V251.534C40.6259 251.625 41.0563 251.859 41.3659 252.237C41.6756 252.612 41.8304 253.077 41.8304 253.631C41.8304 254.105 41.7012 254.531 41.4426 254.909C41.187 255.284 40.8375 256.119 40.3944 256.119Z" fill="#fff"/>
+    // 🎯 ครอบคอนเทนเนอร์หลัก บังคับความสูงล็อกไว้ให้พอดีกรอบหน้าจอ
+    <div className="w-full h-[360px] relative bg-slate-950 rounded-2xl overflow-hidden select-none border border-slate-800/80">
+      
+      <TransformWrapper
+        initialScale={1}
+        minScale={1}
+        maxScale={4}
+        centerOnInit={true}
+        wheel={{ disabled: false }} // เปิดให้ใช้ Scroll Wheel เมาส์เลื่อนซูมเข้าออกได้
+        limitToBounds={false}
+      >
+        {({ zoomIn, zoomOut, resetTransform }) => (
+          <>
+            {/* 🟢 คลื่นคำสั่งลอยตัว: ชุดปุ่มกดซูมแบบสัมผัส เร่งมิติหล่อๆ มุมขวาบน */}
+            <div className="absolute top-3 right-3 z-30 flex flex-col gap-1 bg-black/60 border border-slate-800 p-1 rounded-xl backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => zoomIn()}
+                className="w-7 h-7 flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-sm border border-slate-700/40 transition-all active:scale-90"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={() => zoomOut()}
+                className="w-7 h-7 flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-sm border border-slate-700/40 transition-all active:scale-90"
+              >
+                -
+              </button>
+              <button
+                type="button"
+                onClick={() => resetTransform()}
+                className="text-[8px] py-1 bg-slate-900 hover:bg-slate-800 text-slate-400 rounded-md font-mono border border-slate-700/40 transition-all active:scale-90"
+              >
+                RESET
+              </button>
+            </div>
 
-          <circle cx="58" cy="251" r="8.5" className={getTableStyle('35')} onClick={() => handleTableClick('35')} />
-          <path className="pointer-events-none" d="M52.1188 254.21V253.341L55.954 247.273H56.5847V248.619H56.1586L53.2608 253.205V253.273H58.4256V254.21H52.1188ZM56.2267 256V253.946V253.541V247.273H57.2324V256H56.2267ZM62.9735 247.273V256H61.9167V248.381H61.8656L59.7349 249.795V248.722L61.9167 247.273H62.9735Z" fill="#fff"/>
-          
-          <line x1="31.5" y1="197" x2="31.5" y2="191" stroke="#334155"/>
-          <line x1="40.5" y1="197" x2="40.5" y2="191" stroke="#334155"/>
-          <line x1="31" y1="190.5" x2="41" y2="190.5" stroke="#334155"/>
-          <line x1="2.5" y1="197" x2="2.5" y2="543" stroke="#334155"/>
-          
-          {/* ส่วนของเวทีกลางร้านคุณพ่อ */}
-          <rect x="134.5" y="202.5" width="123" height="85" stroke="#475569" fill="#1e293b"/>
-          <path d="M176.2 260.4C175.48 260.4 174.787 260.28 174.12 260.04C173.453 259.8 172.907 259.373 172.48 258.76C172.053 258.147 171.84 257.293 171.84 256.2V238.08H175.4V255.76C175.4 256.373 175.533 256.813 175.8 257.08C176.067 257.347 176.493 257.48 177.08 257.48C177.32 257.48 177.573 257.453 177.84 257.4C178.107 257.347 178.36 257.28 178.6 257.2L179.08 259.8C178.573 260.04 178.08 260.2 177.6 260.28C177.12 260.36 176.653 260.4 176.2 260.4ZM187.046 260.4C186.006 260.4 184.993 260.293 184.006 260.08C183.046 259.867 182.02 259.467 180.926 258.88L182.046 256.16C182.046 256.16 182.633 256.507 183.3 256.507C184.046 257.08 184.793 257.32 185.66 257.44C186.646 257.44 188.62 257.44 190.153 256.72C191.246 255.28 192.366 253.813 192.926 251.707C192.926 248.96 192.366 246.267 191.206 242.8C190.086 241.36 188.353 240.64 186.006 240.64C185.153 240.64 184.286 240.733 183.406 240.92C182.526 241.107 181.753 241.387 181.086 241.76V238.76C181.86 238.36 182.7 238.08 183.606 237.92C184.54 237.76 185.473 237.68 186.406 237.68C188.806 237.68 190.753 238.16 192.246 239.12C193.74 240.053 194.833 241.36 195.526 243.04C196.22 244.72 196.566 246.693 196.566 248.96C196.566 252.48 195.766 255.267 194.166 257.32C192.593 259.373 190.22 260.4 187.046 260.4ZM202.454 260V238.08H204.934L205.574 241.56H205.734C206.187 240.36 207.014 239.413 208.214 238.72C209.414 238.027 210.867 237.68 212.574 237.68C214.174 237.68 215.534 237.96 216.654 338.52C217.8 239.053 218.68 239.88 219.294 241C219.907 242.12 220.214 243.573 220.214 245.36V260H216.654V245.56C216.654 243.96 216.254 242.747 215.454 241.92C214.654 241.093 213.467 240.68 211.894 240.68C210.64 240.68 209.574 240.973 208.694 241.56C207.814 242.147 207.147 242.947 206.694 243.96C206.24 244.947 206.014 246.067 206.014 247.32V260H202.454ZM202.792 234.6V233.04L205.712 231.76H219.792V234.6H202.792ZM216.472 233.04V228.52H219.832V233.04H216.472Z" fill="#e2e8f0"/>
-          
-          {/* ซุ้ม DJ ด้านล่าง */}
-          <line x1="2.99777" y1="543.5" x2="117" y2="542.99" stroke="#334155"/>
-          <line x1="116.5" y1="543" x2="116.5" y2="488" stroke="#334155"/>
-          <line x1="116" y1="487.5" x2="145" y2="487.5" stroke="#334155"/>
-          <line x1="145.5" y1="487" x2="145.5" y2="510" stroke="#334155"/>
-          <line x1="144.997" y1="509.745" x2="284.999" y2="509.502" stroke="#334155"/>
-          <path d="M225.5 510V443.177" stroke="#334155"/>
-          <path d="M173 509.5C171.586 459.147 184.033 445.488 225.612 443.684" stroke="#334155"/>
-          <path d="M196.18 485H193.487V476.273H196.299C197.146 476.273 197.87 476.447 198.472 476.797C199.075 477.143 199.536 477.642 199.857 478.293C200.178 478.94 200.339 479.716 200.339 480.619C200.339 481.528 200.177 482.311 199.853 482.967C199.529 483.621 199.058 484.124 198.438 484.476C197.819 484.825 197.066 485 196.18 485ZM194.543 484.062H196.112C196.833 484.062 197.431 483.923 197.906 483.645C198.38 483.366 198.734 482.97 198.967 482.456C199.2 481.942 199.316 481.33 199.316 480.619C199.316 479.915 199.201 479.308 198.971 478.8C198.741 478.288 198.397 477.896 197.94 477.624C197.482 477.624 196.913 477.21 196.231 477.21H194.543V484.062ZM205.452 476.273H206.509V482.511C206.509 483.068 206.407 483.541 206.202 483.93C205.998 484.32 205.71 484.615 205.337 484.817C204.965 485.018 204.526 485.119 204.021 485.119C203.543 485.119 203.119 485.033 202.746 484.859C202.374 484.683 202.082 484.433 201.869 484.109C201.656 483.786 201.549 483.401 201.549 482.955H202.589C202.589 483.202 202.65 483.418 202.772 483.602C202.897 483.784 203.067 483.926 203.283 484.028C203.499 484.131 203.745 484.182 204.021 484.182C204.325 484.182 204.583 484.118 204.796 483.99C205.009 483.862 205.171 483.675 205.282 483.428C205.396 483.178 205.452 482.872 205.452 482.511V476.273Z" fill="#e2e8f0"/>
+            {/* ข้อความบอกใบ้ไกด์ไลน์ลูกค้า */}
+            <div className="absolute top-3 left-3 z-30 bg-black/50 px-2 py-0.5 rounded-full border border-slate-800/80 pointer-events-none">
+              <p className="text-[9px] font-sans text-slate-400">💡 จีบนิ้วเพื่อซูม / ลากเพื่อเลื่อนดูโต๊ะ</p>
+            </div>
 
-          {/* โซฟากลุ่มด้านล่าง VVIP F1, F2 ทำไฮไลต์ชมพูแจ่มๆ ตามที่บอสดีไซน์ */}
-          <rect x="31.3171" y="497.488" width="8.29269" height="14.9268" className={getTableStyle('F1')} onClick={() => handleTableClick('F1')} />
-          <rect x="75.3171" y="497.488" width="8.29269" height="14.9268" className={getTableStyle('F2')} onClick={() => handleTableClick('F2')} />
-          
-          {/* ขอบเขตกำแพงโซฟาเพิ่มเติม */}
-          <rect x="31.5171" y="497.688" width="7.89269" height="14.5268" stroke="#f472b6" strokeWidth="0.4" fill="none"/>
-          <rect x="29.6585" y="495" width="8.29269" height="3.31707" fill="#f472b6"/>
-          <rect x="31.3171" y="511.585" width="8.29269" height="14.9268" fill="#f472b6"/>
-          <rect x="29.6585" y="525.683" width="8.29269" height="3.31707" fill="#f472b6"/>
-          <rect x="28" y="496.659" width="4.14634" height="30.6829" fill="#f472b6"/>
-          <rect x="68.2927" y="526.512" width="8.29269" height="14.9268" transform="rotate(180 68.2927 526.512)" fill="#f472b6"/>
-          <rect x="69.9512" y="529" width="8.29269" height="3.31707" transform="rotate(180 69.9512 529)" fill="#f472b6"/>
-          <rect x="68.2927" y="512.415" width="8.29269" height="14.9268" transform="rotate(180 68.2927 512.415)" fill="#f472b6"/>
-          <rect x="69.9512" y="498.317" width="8.29269" height="3.31707" transform="rotate(180 69.9512 498.317)" fill="#f472b6"/>
-          <rect x="71.6098" y="527.341" width="4.14634" height="30.6829" transform="rotate(180 71.6098 527.341)" fill="#f472b6"/>
-          <rect x="41.4268" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 41.4268 537.667)" fill="#f472b6"/>
-          <rect x="40" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 40 539.4)" fill="#f472b6"/>
-          <rect x="49.5122" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 49.5122 537.667)" fill="#f472b6"/>
-          <rect x="57.5976" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 57.5976 539.4)" fill="#f472b6"/>
-          <rect x="40.9512" y="541.133" width="4.33333" height="17.5976" transform="rotate(-90 40.9512 541.133)" fill="#f472b6"/>
-          <rect x="75.5171" y="497.688" width="7.89269" height="14.5268" stroke="#f472b6" strokeWidth="0.4" fill="none"/>
-          <rect x="73.6585" y="495" width="8.29269" height="3.31707" fill="#f472b6"/>
-          <rect x="75.3171" y="511.585" width="8.29269" height="14.9268" fill="#f472b6"/>
-          <rect x="73.6585" y="525.683" width="8.29269" height="3.31707" fill="#f472b6"/>
-          <rect x="72" y="496.659" width="4.14634" height="30.6829" fill="#f472b6"/>
-          <rect x="112.293" y="526.512" width="8.29269" height="14.9268" transform="rotate(180 112.293 526.512)" fill="#f472b6"/>
-          <rect x="113.951" y="529" width="8.29269" height="3.31707" transform="rotate(180 113.951 529)" fill="#f472b6"/>
-          <rect x="112.293" y="512.415" width="8.29269" height="14.9268" transform="rotate(180 112.293 512.415)" fill="#f472b6"/>
-          <rect x="113.951" y="498.317" width="8.29269" height="3.31707" transform="rotate(180 113.951 498.317)" fill="#f472b6"/>
-          <rect x="115.61" y="527.341" width="4.14634" height="30.6829" transform="rotate(180 115.61 527.341)" fill="#f472b6"/>
-          <rect x="85.4268" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 85.4268 537.667)" fill="#f472b6"/>
-          <rect x="84" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 84 539.4)" fill="#f472b6"/>
-          <rect x="93.5122" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 93.5122 537.667)" fill="#f472b6"/>
-          <rect x="101.598" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 101.598 539.4)" fill="#f472b6"/>
-          <rect x="84.9512" y="541.133" width="4.33333" height="17.5976" transform="rotate(-90 84.9512 541.133)" fill="#f472b6"/>
-          
-          <line x1="284.5" y1="509" x2="284.5" y2="482" stroke="#334155"/>
-          <line x1="285" y1="482.5" x2="378" y2="482.5" stroke="#334155"/>
-          <line x1="376.753" y1="482.001" x2="376.753" y2="388.997" stroke="#334155"/>
-          <rect x="135" y="290" width="19" height="7" fill="#141414"/>
-          <rect x="155" y="290" width="19" height="7" fill="#141414"/>
-          <rect x="219" y="290" width="19" height="7" fill="#141414"/>
-          <rect x="241" y="290" width="19" height="7" fill="#141414"/>
+            {/* 🟢 ตัวทรานส์ฟอร์ม Component ตัวคุมระเบียบการขยับและกวาดพิกัด */}
+            <TransformComponent 
+              wrapperClass="!w-full !h-full" 
+              contentClass="!w-full !h-full flex justify-center items-center"
+            >
+              <svg 
+                width="393" 
+                height="852" 
+                viewBox="0 0 393 852" 
+                fill="none" 
+                xmlns="http://www.w3.org/2000/svg" 
+                className="cursor-grab active:cursor-grabbing transition-shadow"
+              >
+                <g clipPath="url(#clip0_2002_2)">
+                  <rect width="393" height="852" fill="#020617"/>
+                  
+                  {/* เส้นผนังร้านค้าและกำแพงกั้นโซน */}
+                  <line x1="2" y1="197.5" x2="116" y2="197.5" stroke="#334155"/>
+                  <line x1="108.5" y1="197" x2="108.5" y2="181" stroke="#334155"/>
+                  <line x1="108" y1="180.5" x2="285" y2="180.5" stroke="#334155"/>
+                  <line x1="285" y1="202.012" x2="285" y2="181.988" stroke="#334155"/>
+                  <line x1="276.5" y1="202.012" x2="276.5" y2="181.988" stroke="#334155"/>
+                  <line x1="116.5" y1="181" x2="116.5" y2="268" stroke="#334155"/>
+                  <line x1="276" y1="200.5" x2="285" y2="200.5" stroke="#334155"/>
+                  <line x1="286" y1="201.5" x2="357" y2="201.5" stroke="#334155"/>
+                  <line x1="357.5" y1="201" x2="357.5" y2="294" stroke="#334155"/>
+                  <line x1="357.01" y1="292.75" x2="324.998" y2="292.75" stroke="#334155"/>
+                  <line x1="325.392" y1="292.31" x2="295.392" y2="330.31" stroke="#334155"/>
+                  <line x1="295.5" y1="331" x2="295.5" y2="390" stroke="#334155"/>
+                  <line x1="295" y1="389.5" x2="307" y2="389.5" stroke="#334155"/>
+                  <line x1="324" y1="389.5" x2="378" y2="389.5" stroke="#334155"/>
+                  <line x1="324.5" y1="389" x2="324.5" y2="378" stroke="#334155"/>
+                  <line x1="31.5" y1="197" x2="31.5" y2="191" stroke="#334155"/>
+                  <line x1="40.5" y1="197" x2="40.5" y2="191" stroke="#334155"/>
+                  <line x1="31" y1="190.5" x2="41" y2="190.5" stroke="#334155"/>
+                  <line x1="2.5" y1="197" x2="2.5" y2="543" stroke="#334155"/>
 
-        </g>
-        <defs>
-          <clipPath id="clip0_2002_2"><rect width="393" height="852" fill="white"/></clipPath>
-        </defs>
-      </svg>
+                  {/* เรนเดอร์เก้าอี้และตัวเลขระบุโต๊ะทั้งหมด */}
+                  {RESTAURANT_TABLES.map((t) => (
+                    <g key={t.id}>
+                      <circle 
+                        cx={t.cx} 
+                        cy={t.cy} 
+                        r="8.5" 
+                        className={getTableStyle(t.id)} 
+                        onClick={() => handleTableClick(t.id)} 
+                      />
+                      <text 
+                        x={t.cx} 
+                        y={t.cy + 3} 
+                        fill="#ffffff" 
+                        fontSize="8" 
+                        fontWeight="bold" 
+                        textAnchor="middle" 
+                        fontFamily="sans-serif" 
+                        className="pointer-events-none select-none"
+                      >
+                        {t.label}
+                      </text>
+                    </g>
+                  ))}
+                  
+                  {/* ส่วนโซนเวทีหลัก */}
+                  <rect x="134.5" y="202.5" width="123" height="85" stroke="#475569" fill="#1e293b"/>
+                  <text x="196" y="252" fill="#e2e8f0" fontSize="24" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">เวที</text>
+                  
+                  {/* ซุ้มดีเจและแนวกำแพงด้านล่าง */}
+                  <line x1="2.99777" y1="543.5" x2="117" y2="542.99" stroke="#334155"/>
+                  <line x1="116.5" y1="543" x2="116.5" y2="488" stroke="#334155"/>
+                  <line x1="116" y1="487.5" x2="145" y2="487.5" stroke="#334155"/>
+                  <line x1="145.5" y1="487" x2="145.5" y2="510" stroke="#334155"/>
+                  <line x1="144.997" y1="509.745" x2="284.999" y2="509.502" stroke="#334155"/>
+                  <path d="M225.5 510V443.177" stroke="#334155"/>
+                  <path d="M173 509.5C171.586 459.147 184.033 445.488 225.612 443.684" stroke="#334155"/>
+                  <line x1="284.5" y1="509" x2="284.5" y2="482" stroke="#334155"/>
+                  <line x1="285" y1="482.5" x2="378" y2="482.5" stroke="#334155"/>
+                  <line x1="376.753" y1="482.001" x2="376.753" y2="388.997" stroke="#334155"/>
+                  
+                  <text x="196" y="482" fill="#94a3b8" fontSize="14" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">DJ</text>
+
+                  {/* ทางเข้าหน้าร้าน */}
+                  <text x="330" y="370" fill="#e2e8f0" fontSize="14" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">ทางเข้า</text>
+
+                  {/* ลายเส้นโครงสร้างศิลปะโซฟาชุดสีชมพูของคุณพ่อ */}
+                  <rect x="31.5171" y="497.688" width="7.89269" height="14.5268" stroke="#f472b6" strokeWidth="0.4" fill="#f472b6"/>
+                  <rect x="29.6585" y="495" width="8.29269" height="3.31707" fill="#f472b6"/>
+                  <rect x="31.3171" y="511.585" width="8.29269" height="14.9268" fill="#f472b6"/>
+                  <rect x="29.6585" y="525.683" width="8.29269" height="3.31707" fill="#f472b6"/>
+                  <rect x="28" y="496.659" width="4.14634" height="30.6829" fill="#f472b6"/>
+
+                  <rect x="68.2927" y="526.512" width="8.29269" height="14.9268" transform="rotate(180 68.2927 526.512)" fill="#f472b6"/>
+                  <rect x="69.9512" y="529" width="8.29269" height="3.31707" transform="rotate(180 69.9512 529)" fill="#f472b6"/>
+                  <rect x="68.2927" y="512.415" width="8.29269" height="14.9268" transform="rotate(180 68.2927 512.415)" fill="#f472b6"/>
+                  <rect x="69.9512" y="498.317" width="8.29269" height="3.31707" transform="rotate(180 69.9512 498.317)" fill="#f472b6"/>
+                  <rect x="71.6098" y="527.341" width="4.14634" height="30.6829" transform="rotate(180 71.6098 527.341)" fill="#f472b6"/>
+
+                  <rect x="41.4268" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 41.4268 537.667)" fill="#f472b6"/>
+                  <rect x="40" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 40 539.4)" fill="#f472b6"/>
+                  <rect x="49.5122" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 49.5122 537.667)" fill="#f472b6"/>
+                  <rect x="57.5976" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 57.5976 539.4)" fill="#f472b6"/>
+                  <rect x="40.9512" y="541.133" width="4.33333" height="17.5976" transform="rotate(-90 40.9512 541.133)" fill="#f472b6"/>
+
+                  <rect x="75.5171" y="497.688" width="7.89269" height="14.5268" stroke="#f472b6" strokeWidth="0.4" fill="#f472b6"/>
+                  <rect x="73.6585" y="495" width="8.29269" height="3.31707" fill="#f472b6"/>
+                  <rect x="75.3171" y="511.585" width="8.29269" height="14.9268" fill="#f472b6"/>
+                  <rect x="73.6585" y="525.683" width="8.29269" height="3.31707" fill="#f472b6"/>
+                  <rect x="72" y="496.659" width="4.14634" height="30.6829" fill="#f472b6"/>
+
+                  <rect x="112.293" y="526.512" width="8.29269" height="14.9268" transform="rotate(180 112.293 526.512)" fill="#f472b6"/>
+                  <rect x="113.951" y="529" width="8.29269" height="3.31707" transform="rotate(180 113.951 529)" fill="#f472b6"/>
+                  <rect x="112.293" y="512.415" width="8.29269" height="14.9268" transform="rotate(180 112.293 512.415)" fill="#f472b6"/>
+                  <rect x="113.951" y="498.317" width="8.29269" height="3.31707" transform="rotate(180 113.951 498.317)" fill="#f472b6"/>
+                  <rect x="115.61" y="527.341" width="4.14634" height="30.6829" transform="rotate(180 115.61 527.341)" fill="#f472b6"/>
+
+                  <rect x="85.4268" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 85.4268 537.667)" fill="#f472b6"/>
+                  <rect x="84" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 84 539.4)" fill="#f472b6"/>
+                  <rect x="93.5122" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 93.5122 537.667)" fill="#f472b6"/>
+                  <rect x="101.598" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 101.598 539.4)" fill="#f472b6"/>
+                  <rect x="84.9512" y="541.133" width="4.33333" height="17.5976" transform="rotate(-90 84.9512 541.133)" fill="#f472b6"/>
+                  
+                  <rect x="135" y="290" width="19" height="7" fill="#141414"/>
+                  <rect x="155" y="290" width="19" height="7" fill="#141414"/>
+                  <rect x="219" y="290" width="19" height="7" fill="#141414"/>
+                  <rect x="241" y="290" width="19" height="7" fill="#141414"/>
+                </g>
+                <defs>
+                  <clipPath id="clip0_2002_2"><rect width="393" height="852" fill="white"/></clipPath>
+                </defs>
+              </svg>
+            </TransformComponent>
+          </>
+        )}
+      </TransformWrapper>
     </div>
   )
 }
