@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import { motion, AnimatePresence } from 'framer-motion'; 
 import {
   Search,
   Filter,
@@ -31,10 +32,14 @@ import {
   DollarSign,    
   AlertCircle,   
   Lock,    
+  Unlock, 
   Mail,    
   LogOut,  
+  LayoutGrid,  
+  Map,         
   type LucideIcon,
 } from 'lucide-react';
+import FloorPlan from '@/components/booking/FloorPlan'; 
 
 /* ----------------------------------------------------------------------------
  * Premium Nightlife Theme tokens
@@ -77,7 +82,10 @@ function zoneOf(tableNumber: string): ZoneMeta {
 type LiveStatus = 'tonight' | 'upcoming' | 'past';
 
 function deriveStatus(b: any): LiveStatus {
-  const stamp = new Date(`${b.booking_date}T${(b.booking_time || '00:00:00').slice(0, 8)}`);
+  const rawTime = b.booking_time || '00:00:00';
+  const timePart = rawTime.includes('-') ? rawTime.split('-')[0].trim() : rawTime.slice(0, 5);
+
+  const stamp = new Date(`${b.booking_date}T${timePart}:00`);
   if (Number.isNaN(stamp.getTime())) return 'upcoming';
 
   const now = new Date();
@@ -127,7 +135,32 @@ export default function MonitorPage() {
   const [isBookingOpen, setIsBookingOpen] = useState(true);
   const [shopExists, setShopExists] = useState(true);
 
-  // Modals
+  // คอนโทรลอินเทอร์เฟซ
+  const [viewMode, setViewMode] = useState<'list' | 'floorplan'>('list');
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [adminSelectedDate, setAdminSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+
+  // คอนโทรลสำหรับ Custom ล็อกโต๊ะแอดมิน 
+  const [isLockConfirmModalOpen, setIsLockConfirmModalOpen] = useState(false);
+  const [tablePendingLock, setTablePendingLock] = useState<string | null>(null);
+  const [isLockProcessing, setIsLockProcessing] = useState(false);
+  const [lockModalMode, setLockModalMode] = useState<'lock' | 'unlock'>('lock');
+
+  // 🟢 คอนโทรลระบบแจ้งเตือน Custom Premium Pop-up
+  const [appNotice, setAppNotice] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'error' | 'info';
+    title: string;
+    message: string;
+  }>({ isOpen: false, type: 'info', title: '', message: '' });
+
+  const triggerNotice = (type: 'success' | 'error' | 'info', title: string, message: string) => {
+    setAppNotice({ isOpen: true, type, title, message });
+  };
+
+  // Modals อื่นๆ
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportForm, setReportForm] = useState({ issueType: 'ระบบจองขัดข้อง', details: '' });
   const [isSendingReport, setIsSendingReport] = useState(false);
@@ -178,10 +211,8 @@ export default function MonitorPage() {
     }
   };
 
-  const handleLogoutClick = async () => {
-    if (confirm('คุณต้องการออกจากระบบควบคุมคิวงานใช่หรือไม่?')) {
-      await supabase.auth.signOut();
-    }
+  const handleLogoutClick = () => {
+    triggerNotice('info', 'ระบบจำกัดสิทธิ์ความปลอดภัย', 'กรุณาใช้ฟังก์ชันของเบราว์เซอร์หรือปิดแท็บเพื่อออกระบบคิวควบคุมหลักอย่างสมบูรณ์แบบครับ');
   };
 
   const calendarDays = useMemo(() => {
@@ -309,28 +340,95 @@ export default function MonitorPage() {
     loadShopSettings();
   }, [shopSlug]);
 
-  const handleUpdateStatus = async (bookingId: string, nextStatus: 'checked_in' | 'no_show') => {
+  const handleUpdateStatus = async (bookingId: string, nextStatus: 'confirmed' | 'checked_in' | 'no_show') => {
     try {
       const { error: patchError } = await supabase
         .from('restaurant_bookings')
         .update({ status: nextStatus })
         .eq('id', bookingId);
       if (patchError) throw patchError;
+      
+      if (nextStatus === 'confirmed') {
+        triggerNotice('success', 'ยืนยันรับยอดเงินสำเร็จ', 'ระบบได้ทำการอนุมัติสิทธิ์ล็อกที่นั่ง และส่งคลื่นอัปเดตสถานะเปลี่ยนโต๊ะอาหารเป็นไฟแดงให้ลูกค้าออนไลน์ทุกรายเรียลไทม์เรียบร้อยแล้วครับ');
+      }
     } catch (err) {
       console.error(err);
-      alert('เกิดข้อผิดพลาด ไม่สามารถเปลี่ยนสถานะคิวได้ครับ');
+      triggerNotice('error', 'ระบบทำงานขัดข้อง', 'ไม่สามารถเชื่อมต่อเน็ตเวิร์กเพื่อปรับปรุงสถานะคิวได้ในขณะนี้');
     }
   };
 
-  const handleToggleBookingStatus = async () => {
-    const nextState = !isBookingOpen;
-    setIsBookingOpen(nextState);
+  const handleToggleBookingStatus = async (targetState: boolean) => {
+    setIsBookingOpen(targetState);
+    setIsStatusDropdownOpen(false);
     try {
-      await supabase.from('shop_settings').upsert({ shop_id: shopSlug, is_booking_open: nextState });
+      await supabase.from('shop_settings').upsert({ shop_id: shopSlug, is_booking_open: targetState });
     } catch (err) {
       console.error(err);
-      alert('ไม่สามารถอัปเดตสถานะร้านได้ กรุณาลองใหม่อีกครั้งครับ');
-      setIsBookingOpen(!nextState);
+      triggerNotice('error', 'อัปเดตระบบล้มเหลว', 'ไม่สามารถปรับเปลี่ยนสถานะการเปิดจองของร้านอาหารบนระบบคลาวด์ได้ครับ');
+      setIsBookingOpen(!targetState);
+    }
+  };
+
+  const handleAdminLockTableClick = (tableNum: string) => {
+    const existingBooking = bookings.find(
+      (b) => b.booking_date === adminSelectedDate && b.table_number === tableNum && b.status !== 'no_show'
+    );
+
+    if (existingBooking) {
+      if (existingBooking.booking_code?.startsWith('LOCK-')) {
+        setTablePendingLock(tableNum);
+        setLockModalMode('unlock'); 
+        setIsLockConfirmModalOpen(true);
+      } else {
+        triggerNotice('error', 'พื้นที่ถูกจองด้วยสิทธิ์ลูกค้า', `โต๊ะหมายเลข ${tableNum} เป็นคิวชำระเงินของ "คุณ ${existingBooking.customer_name}" ระบบล็อกความปลอดภัยเพื่อป้องกันความสับสนหน้าร้านครับ`);
+      }
+      return;
+    }
+
+    setTablePendingLock(tableNum);
+    setLockModalMode('lock');
+    setIsLockConfirmModalOpen(true); 
+  };
+
+  const executeAdminLockTable = async () => {
+    if (!tablePendingLock) return;
+    setIsLockProcessing(true);
+
+    try {
+      const res = await fetch('/api/admin/lock-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopId: shopSlug,
+          tableNumber: tablePendingLock,
+          bookingDate: adminSelectedDate,
+          action: lockModalMode 
+        })
+      });
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server เกิดปัญหาสัญญาณขาดหาย');
+      }
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Server returned error');
+      
+      setIsLockConfirmModalOpen(false);
+      setTablePendingLock(null);
+
+      triggerNotice(
+        'success',
+        lockModalMode === 'lock' ? 'ล็อกพิกัดโต๊ะสำเร็จ' : 'คืนพื้นที่โต๊ะสำเร็จ',
+        lockModalMode === 'lock'
+          ? `ระบบทำการเปลี่ยนโต๊ะหมายเลข ${tablePendingLock} เป็นสถานะสตาฟฟ์แมนนวลบล็อกสิทธิ์ออนไลน์หน้าร้านเรียบร้อย`
+          : `ปลดล็อกโต๊ะหมายเลข ${tablePendingLock} คืนกลับสู่สถานะว่างเพื่อให้ลูกค้าจากทางบ้านแย่งจองได้ตามปกติแล้ว`
+      );
+    } catch (err: any) {
+      console.error(err);
+      triggerNotice('error', 'คำสั่งขัดข้อง', err.message || 'ระบบหลังบ้านพังกระจาย ส่งสัญญาไปตรวจสอบไฟล์จองไม่สำเร็จ');
+    } finally {
+      setIsLockProcessing(false);
     }
   };
 
@@ -406,7 +504,6 @@ export default function MonitorPage() {
     }
   };
 
-  // 🎯 [แก้ไขแล้ว] อัปเกรดระบบจัดส่งรายงานปัญหา ยิงเข้าอีเมลหลักของบอสโดยตรงแบบ 100% ปลอดภัยเรียบร้อย
   const handleSendReport = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSendingReport(true);
@@ -423,15 +520,14 @@ export default function MonitorPage() {
         `ส่งจากระบบ: 21st Live Reservation Controller`
       );
 
-      // เรียกเปิดแอปพลิเคชันอีเมลหลักบนหน้าจอมือถือหรือคอมพิวเตอร์
       window.location.href = `mailto:${bossEmail}?subject=${subject}&body=${body}`;
 
       setReportForm({ issueType: 'ระบบจองขัดข้อง', details: '' });
       setIsReportModalOpen(false);
-      alert('ระบบกำลังเปิดแอปอีเมลเพื่อส่งรายงานปัญหาครับ');
+      triggerNotice('success', 'เรียกใช้งานอีเมลสำเร็จ', 'ระบบได้ทำการเปิดหน้าแอปพลิเคชันอีเมลหลักเพื่อเตรียมจัดส่งรายงานปัญหาให้ทีมโปรแกรมเมอร์แล้วครับ');
     } catch (err) {
       console.error(err);
-      alert('เกิดข้อผิดพลาดในการเรียกแอปส่งอีเมล');
+      triggerNotice('error', 'ระบบเรียกใช้สิทธิ์พัง', 'ไม่สามารถเปิดลิงก์จดหมายอีเมลของเครื่องคอมพิวเตอร์ได้ครับ');
     } finally {
       setIsSendingReport(false);
     }
@@ -456,18 +552,9 @@ export default function MonitorPage() {
     });
   }, [bookings, query, zone, showPast]);
 
-  // คำนวณรายรับรวมคำนวณแยกตามรายหัวคูณจำนวนแขก
-  const totalRevenue = useMemo(() => {
-    return bookings.reduce((sum, b) => {
-      if (b.status === 'pending' || b.status === 'no_show') return sum;
-      const pricePerHead = eventsMap[b.booking_date]?.price || 0;
-      return sum + (pricePerHead * (b.guests_count || 0));
-    }, 0);
-  }, [bookings, eventsMap]);
-
   const handleExportCSV = () => {
     if (filtered.length === 0) {
-      alert('ไม่มีข้อมูลในหน้าฟีดให้ดาวน์โหลดในขณะนี้ครับ');
+      triggerNotice('error', 'ไม่สามารถดาวน์โหลดได้', 'ไม่มีข้อมูลในหน้าฟีดให้ดาวน์โหลดในขณะนี้ครับ');
       return;
     }
     const headers = ['วันที่จอง', 'เวลานัดหมาย', 'รหัสใบจอง', 'ชื่อลูกค้า', 'เบอร์โทรศัพท์', 'รหัสโต๊ะ', 'จำนวนแขก', 'สถานะคิว', 'ค่าบัตรแพ็กเกจรวม'];
@@ -477,10 +564,19 @@ export default function MonitorPage() {
       else if (b.status === 'checked_in') statusText = 'มาแล้ว';
       else if (b.status === 'no_show') statusText = 'ไม่มา (No Show)';
       
-      const pricePerHead = eventsMap[b.booking_date]?.price || 0;
-      const totalPaidAmount = pricePerHead * (b.guests_count || 0);
+      const tablePrice = eventsMap[b.booking_date]?.price || 0;
 
-      return [b.booking_date, (b.booking_time || '').slice(0, 5), b.booking_code, `"${b.customer_name?.replace(/"/g, '""')}"`, `="${b.phone}"`, b.table_number, b.guests_count, statusText, `${totalPaidAmount} บาท`];
+      return [
+        b.booking_date, 
+        (b.booking_time || '').slice(0, 5), 
+        b.booking_code, 
+        `"${b.customer_name?.replace(/"/g, '""')}"`, 
+        `="${b.phone}"`, 
+        b.table_number, 
+        b.guests_count, 
+        statusText, 
+        `${tablePrice} บาท`
+      ];
     });
 
     const csvContent = ['\uFEFF' + headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
@@ -491,6 +587,14 @@ export default function MonitorPage() {
     link.setAttribute('download', `Report_Monitor_${shopSlug}_${new Date().toISOString().split('T')[0]}.csv`);
     link.click();
   };
+
+  const totalRevenue = useMemo(() => {
+    return bookings.reduce((sum, b) => {
+      if (b.status === 'pending' || b.status === 'no_show') return sum;
+      const tablePrice = eventsMap[b.booking_date]?.price || 0;
+      return sum + tablePrice;
+    }, 0);
+  }, [eventsMap, bookings]);
 
   const groupedByDate = useMemo(() => {
     const groups: Record<string, typeof bookings> = {};
@@ -508,6 +612,15 @@ export default function MonitorPage() {
     () => bookings.filter((b) => deriveStatus(b) === 'tonight' && b.status !== 'no_show' && b.status !== 'pending').length,
     [bookings]
   );
+
+  // 🟢 จุดอัปเดตสำคัญ 1: แก้ไขผังร้านหลังบ้านให้เข้าใจสถานะ 'confirmed' ว่าคือการที่โต๊ะนั้นโดนล็อก (booked)
+  const adminDayTablesMap = useMemo(() => {
+    const dayBookings = bookings.filter(b => b.booking_date === adminSelectedDate && b.status !== 'no_show');
+    return dayBookings.reduce((acc, curr) => ({
+      ...acc,
+      [curr.table_number]: curr.status === 'pending' ? 'pending' : 'booked' // เปลี่ยนตรงนี้เพื่อให้ confirmed = ไฟแดง
+    }), {} as Record<string, 'booked' | 'pending'>);
+  }, [bookings, adminSelectedDate]);
 
   if (!shopExists) return notFound();
 
@@ -614,7 +727,7 @@ export default function MonitorPage() {
             <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white">{shopName}</h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 z-50">
             <button
               type="button"
               onClick={() => { setIsEventModalOpen(true); setEventStatusMsg(null); }}
@@ -624,19 +737,35 @@ export default function MonitorPage() {
               จัดการวันคอนเสิร์ต
             </button>
 
-            <button
-              type="button"
-              onClick={handleToggleBookingStatus}
-              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95"
-              style={{
-                backgroundColor: isBookingOpen ? 'rgba(0, 245, 212, 0.05)' : 'rgba(239, 68, 68, 0.05)',
-                borderColor: isBookingOpen ? 'rgba(0, 245, 212, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                color: isBookingOpen ? THEME.mint : '#F87171',
-              }}
-            >
-              <span className={`h-2 w-2 rounded-full ${isBookingOpen ? 'animate-pulse bg-[#00F5D4]' : 'bg-red-500'}`} />
-              {isBookingOpen ? 'เปิดรับจองออนไลน์ปกติ' : 'ปิดระบบรับคิวชั่วคราว'}
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold border transition-all active:scale-95 ${
+                  isBookingOpen ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'
+                }`}
+              >
+                <Radio size={14} className={isBookingOpen ? "animate-pulse text-emerald-400" : "text-red-400"} />
+                <div>
+                  <p className="font-mono text-[9px] uppercase tracking-widest font-bold leading-none text-left opacity-70">SYSTEM STATUS</p>
+                  <p className="text-xs font-bold mt-0.5">{isBookingOpen ? `ระบบเปิดปกติ • Sync: ${lastSync}` : 'ปิดระบบรับคิวออนไลน์'}</p>
+                </div>
+                <ChevronDown size={12} className="ml-1 opacity-70" />
+              </button>
+
+              <AnimatePresence>
+                {isStatusDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#16161E] border border-[#2D2235] p-1.5 shadow-2xl space-y-1 z-50">
+                    <button type="button" onClick={() => handleToggleBookingStatus(true)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-emerald-400 font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> เปิดรับจองออนไลน์ปกติ
+                    </button>
+                    <button type="button" onClick={() => handleToggleBookingStatus(false)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-red-400 font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400" /> ปิดระบบรับคิวล่วงหน้าชั่วคราว
+                    </button>
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
 
             <button
               onClick={() => setIsReportModalOpen(true)}
@@ -654,14 +783,6 @@ export default function MonitorPage() {
               <LogOut size={14} />
               ออกจากระบบ
             </button>
-
-            <div className="flex items-center gap-2.5 bg-black/40 border rounded-xl px-4 py-2" style={{ borderColor: THEME.border }}>
-              <Radio size={14} className="animate-pulse" style={{ color: THEME.pink }} />
-              <div className="text-left">
-                <p className="font-mono text-[9px] uppercase tracking-widest font-bold leading-none" style={{ color: THEME.pink }}>STREAM LIVE</p>
-                <p className="font-mono text-xs font-semibold mt-0.5" style={{ color: THEME.text }}>Sync: {lastSync}</p>
-              </div>
-            </div>
           </div>
         </header>
 
@@ -674,15 +795,15 @@ export default function MonitorPage() {
             icon={Users}
             label="Guests Inbound"
             value={`${bookings
-              .filter((b) => deriveStatus(b) === 'tonight' && b.status !== 'no_show' && b.status !== 'pending')
-              .reduce((sum, b) => sum + (b.guests_count || 0), 0)} ท่าน`}
+              .filter((b) => deriveStatus(b) === 'tonight' && b.status !== 'no_show' && b.status !== 'pending').length} โต๊ะ`}
             accent="#8B9DFF"
           />
         </div>
 
         {/* Filters Controls */}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <div className="flex flex-1 items-center gap-2.5 rounded-xl px-4 py-3 bg-black/20 border" style={{ borderColor: THEME.border }}>
+        <div className="mt-6 flex flex-col gap-3 lg:flex-row justify-between items-stretch lg:items-center">
+          
+          <div className="flex flex-1 items-center gap-2.5 rounded-xl px-4 h-11 bg-black/20 border" style={{ borderColor: THEME.border }}>
             <Search size={18} style={{ color: THEME.muted }} />
             <input
               type="text"
@@ -693,11 +814,28 @@ export default function MonitorPage() {
             />
           </div>
 
-          <div className="flex gap-3 flex-wrap">
+          <div className="flex gap-3 flex-wrap items-center">
+            <div className="bg-black/40 border p-1 rounded-xl flex items-center gap-1 h-11" style={{ borderColor: THEME.border }}>
+              <button 
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-1.5 px-3 h-full rounded-lg text-xs font-bold transition-all ${viewMode === 'list' ? 'bg-[#FF1F88] text-white shadow-md' : 'text-[#9E9EAF] hover:text-white'}`}
+              >
+                <LayoutGrid size={13} /> รายชื่อคิว
+              </button>
+              <button 
+                type="button"
+                onClick={() => setViewMode('floorplan')}
+                className={`flex items-center gap-1.5 px-3 h-full rounded-lg text-xs font-bold transition-all ${viewMode === 'floorplan' ? 'bg-[#FF1F88] text-white shadow-md' : 'text-[#9E9EAF] hover:text-white'}`}
+              >
+                <Map size={13} /> ผังร้าน & บล็อกโต๊ะ
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => { setShowPast(!showPast); }}
-              className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium border transition-all active:scale-95"
+              className="flex items-center gap-2 rounded-xl px-4 h-11 text-sm font-medium border transition-all active:scale-95"
               style={{
                 backgroundColor: showPast ? `${THEME.purple}1A` : 'transparent',
                 borderColor: showPast ? THEME.purple : THEME.border,
@@ -714,19 +852,19 @@ export default function MonitorPage() {
             <button
               type="button"
               onClick={handleExportCSV}
-              className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold border transition-all active:scale-95 bg-transparent hover:bg-white/5"
+              className="flex items-center gap-2 rounded-xl px-4 h-11 text-sm font-bold border transition-all active:scale-95 bg-transparent hover:bg-white/5"
               style={{ borderColor: THEME.border, color: THEME.mint }}
             >
               <Download size={16} />
               <span>Export CSV Report</span>
             </button>
 
-            <div className="relative flex items-center rounded-xl bg-black/20 border" style={{ borderColor: THEME.border }}>
+            <div className="relative flex items-center rounded-xl bg-black/20 border h-11" style={{ borderColor: THEME.border }}>
               <Filter size={16} className="pointer-events-none absolute left-4" style={{ color: THEME.muted }} />
               <select
                 value={zone}
                 onChange={(e) => setZone(e.target.value as ZoneId)}
-                className="h-full cursor-pointer appearance-none bg-transparent py-3 pl-11 pr-10 text-sm font-medium outline-none text-white"
+                className="h-full cursor-pointer appearance-none bg-transparent pl-11 pr-10 text-sm font-medium outline-none text-white rounded-xl"
               >
                 {ZONES.map((z) => (
                   <option key={z.id} value={z.id} style={{ backgroundColor: THEME.card }}>
@@ -745,56 +883,215 @@ export default function MonitorPage() {
 
           {loading && bookings.length === 0 ? (
             <LoadingGrid />
-          ) : filtered.length === 0 ? (
-            <EmptyState hasBookings={bookings.length > 0} />
-          ) : (
-            <div className="space-y-10">
-              {sortedDates.map((dateKey) => {
-                const isToday = dateKey === new Date().toISOString().split('T')[0];
-                const isPastDate = dateKey < new Date().toISOString().split('T')[0];
-                const dayEvent = eventsMap[dateKey];
+          ) : viewMode === 'list' ? (
+            filtered.length === 0 ? (
+              <EmptyState hasBookings={bookings.length > 0} />
+            ) : (
+              <div className="space-y-10">
+                {sortedDates.map((dateKey) => {
+                  const isToday = dateKey === new Date().toISOString().split('T')[0];
+                  const isPastDate = dateKey < new Date().toISOString().split('T')[0];
+                  const dayEvent = eventsMap[dateKey];
 
-                return (
-                  <div key={dateKey} className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-2 border-b pb-2" style={{ borderColor: THEME.border }}>
-                      <CalendarDays size={16} style={{ color: isToday ? THEME.pink : isPastDate ? THEME.muted : THEME.gold }} />
-                      <h2 className="text-sm font-mono font-bold tracking-wider text-white">
-                        {isToday ? `🔥 รายการวันนี้ (${dateKey})` : `⏳ บันทึกย้อนหลัง (${dateKey})`}
-                      </h2>
-                      
-                      {dayEvent && (
-                        <span 
-                          className="text-[11px] px-2.5 py-0.5 rounded-md font-bold border font-sans animate-pulse"
-                          style={{ backgroundColor: `${THEME.pink}10`, borderColor: `${THEME.pink}40`, color: THEME.pink }}
-                        >
-                          🎵 โหมดอีเวนต์: {dayEvent.title} (บัตรต่อท่าน {dayEvent.price.toLocaleString()}.-)
+                  return (
+                    <div key={dateKey} className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-2 border-b pb-2" style={{ borderColor: THEME.border }}>
+                        <CalendarDays size={16} style={{ color: isToday ? THEME.pink : isPastDate ? THEME.muted : THEME.gold }} />
+                        <h2 className="text-sm font-mono font-bold tracking-wider text-white">
+                          {isToday ? `🔥 รายการวันนี้ (${dateKey})` : `⏳ บันทึกย้อนหลัง (${dateKey})`}
+                        </h2>
+                        
+                        {dayEvent && (
+                          <span 
+                            className="text-[11px] px-2.5 py-0.5 rounded-md font-bold border font-sans animate-pulse"
+                            style={{ backgroundColor: `${THEME.pink}10`, borderColor: `${THEME.pink}40`, color: THEME.pink }}
+                          >
+                            🎵 โหมดอีเวนต์: {dayEvent.title} (บัตรเหมาต่อโต๊ะ {dayEvent.price.toLocaleString()}.-)
+                          </span>
+                        )}
+
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/40 text-slate-400 ml-auto">
+                          {groupedByDate[dateKey].length} รายการ
                         </span>
-                      )}
+                      </div>
 
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/40 text-slate-400 ml-auto">
-                        {groupedByDate[dateKey].length} รายการ
-                      </span>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {groupedByDate[dateKey].map((b) => (
+                          <BookingCard 
+                            key={b.id} 
+                            booking={b} 
+                            eventPrice={eventsMap[b.booking_date]?.price || 0}
+                            onUpdateStatus={handleUpdateStatus}
+                          />
+                        ))}
+                      </div>
                     </div>
-
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                      {groupedByDate[dateKey].map((b) => (
-                        <BookingCard 
-                          key={b.id} 
-                          booking={b} 
-                          eventPrice={eventsMap[b.booking_date]?.price || 0}
-                          onUpdateStatus={handleUpdateStatus}
-                        />
-                      ))}
-                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <div className="space-y-4 animate-fade-in">
+              <div className="p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-amber-500/5 border-amber-500/20 text-xs text-[#E5B842]">
+                <div className="leading-relaxed">
+                  <p className="font-bold flex items-center gap-1.5 mb-1">🛡️ แผงควบคุมล็อกตำแหน่งโต๊ะอาหารหลังบ้าน</p>
+                  <p className="text-slate-400">คุณพ่อสามารถเลือกวันที่ที่ต้องการตรวจสอบ จากนั้นคลิกที่ไอคอนโต๊ะบนผังร้านเพื่อสั่งบล็อกคิว (สำหรับแขก Walk-in หรือโทรจอง) ไฟแดงจะเด้งบล็อกลูกค้าทางบ้านเรียลไทม์ทันทีครับ</p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="font-bold text-white text-xs sm:text-sm">เลือกวันที่ตรวจสอบ:</span>
+                  <div className="relative flex items-center bg-black/50 border border-[#2D2235] rounded-xl px-3.5 h-10 transition-all focus-within:border-pink-500 group shadow-lg">
+                    <CalendarDays size={15} className="text-pink-500 absolute left-3.5 pointer-events-none group-focus-within:scale-110 transition-transform" />
+                    <input 
+                      type="date" 
+                      value={adminSelectedDate}
+                      onChange={(e) => setAdminSelectedDate(e.target.value)}
+                      className="bg-transparent pl-6 pr-0 text-white outline-none font-mono text-xs cursor-pointer h-full w-32 appearance-none color-scheme-dark custom-date-hide-icon"
+                    />
                   </div>
-                );
-              })}
+                </div>
+              </div>
+
+              <div className="w-full rounded-3xl bg-[#16161E] border border-[#2D2235] p-6 flex items-center justify-center min-h-[450px] overflow-x-auto shadow-inner">
+                <FloorPlan 
+                  selectedTable={selectedTable}
+                  setSelectedTable={(tableNum) => {
+                    setSelectedTable(tableNum);
+                    if (tableNum) handleAdminLockTableClick(tableNum);
+                  }}
+                  dayTables={adminDayTablesMap}
+                />
+              </div>
             </div>
           )}
         </main>
       </div>
 
-      {/* 🔮 Pop-up หลังบ้านจัดการคอนเสิร์ตและจัดเก็บเงิน */}
+      {/* Custom คอนเฟิร์มป็อปอัปอัจฉริยะ ล็อก/ปลดล็อกโต๊ะแมนนวล */}
+      <AnimatePresence>
+        {isLockConfirmModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[999]">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-md rounded-2xl border p-6 space-y-5 shadow-[0_0_50px_rgba(0,0,0,0.8)]"
+              style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
+            >
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-colors"
+                  style={{ 
+                    backgroundColor: lockModalMode === 'lock' ? 'rgba(229, 184, 66, 0.1)' : 'rgba(0, 245, 212, 0.1)', 
+                    borderColor: lockModalMode === 'lock' ? 'rgba(229, 184, 66, 0.2)' : 'rgba(0, 245, 212, 0.2)', 
+                    color: lockModalMode === 'lock' ? THEME.gold : THEME.mint 
+                  }}
+                >
+                  <Lock size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">
+                    {lockModalMode === 'lock' ? 'ยืนยันคำสั่งล็อกตำแหน่งโต๊ะอาหาร' : 'ยืนยันคำสั่ง "ปลดล็อก" โต๊ะอาหาร'}
+                  </h3>
+                  <p className="text-[11px] text-[#9E9EAF] font-mono mt-0.5">
+                    {lockModalMode === 'lock' ? 'ADMIN MANUAL OVERRIDE PROTOCOL' : 'ADMIN DISMANTLE OVERRIDE PROTOCOL'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-black/40 border border-slate-800 text-xs sm:text-sm space-y-2 leading-relaxed">
+                <p className="text-gray-300">
+                  คุณต้องการทำการ {lockModalMode === 'lock' ? <span className="text-pink-500 font-extrabold">ล็อกโต๊ะหมายเลข {tablePendingLock}</span> : <span className="text-emerald-400 font-extrabold">ปลดล็อกโต๊ะหมายเลข {tablePendingLock}</span>} ใช่หรือไม่?
+                </p>
+                <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px] text-slate-400">
+                  <div className="flex items-center gap-1"><CalendarDays size={12} className="text-[#E5B842]" /> วันที่: {adminSelectedDate}</div>
+                  <div className="flex items-center gap-1"><Users size={12} className="text-[#00F5D4]" /> โดย: สตาฟฟ์หลังบ้าน</div>
+                </div>
+              </div>
+
+              <div className="p-3 border rounded-xl text-[11px] flex items-start gap-2 leading-relaxed" style={{ backgroundColor: lockModalMode === 'lock' ? 'rgba(239,68,68,0.05)' : 'rgba(0,245,212,0.05)', borderColor: lockModalMode === 'lock' ? 'rgba(239,68,68,0.1)' : 'rgba(0,245,212,0.1)', color: lockModalMode === 'lock' ? '#F87171' : THEME.mint }}>
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <span>
+                  {lockModalMode === 'lock' 
+                    ? 'เมื่อกดยืนยันแล้ว ตำแหน่งโต๊ะนี้บนหน้าจอจองของลูกค้าออนไลน์ทุกคนจะเปลี่ยนเป็นสีแดง (ไม่ว่าง) ทันทีในรูปแบบเรียลไทม์ครับ'
+                    : 'เมื่อกดยืนยันแล้ว ระบบจะทำการล้างสถานะบล็อกออก โต๊ะนี้จะกลับมาเปิดเป็นสีเขียว (ว่าง) เพื่อให้ลูกค้าออนไลน์จากทางบ้านแย่งกดจองเข้ามาได้ตามปกติทันทีครับ'
+                  }
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 pt-1 font-bold text-xs">
+                <button
+                  type="button"
+                  disabled={isLockProcessing}
+                  onClick={() => { setIsLockConfirmModalOpen(false); setTablePendingLock(null); }}
+                  className="flex-1 h-10 rounded-xl border border-slate-700 hover:bg-white/5 text-white transition-colors active:scale-95 disabled:opacity-40"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  disabled={isLockProcessing}
+                  onClick={executeAdminLockTable}
+                  className="flex-1 h-10 rounded-xl text-black font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40"
+                  style={{ 
+                    backgroundColor: lockModalMode === 'lock' ? THEME.gold : THEME.mint, 
+                    boxShadow: lockModalMode === 'lock' ? '0 4px 15px rgba(229, 184, 66, 0.2)' : '0 4px 15px rgba(0, 245, 212, 0.2)' 
+                  }}
+                >
+                  {isLockProcessing ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      {lockModalMode === 'lock' ? 'ยืนยันล็อกโต๊ะ' : 'ยืนยันปลดล็อกโต๊ะ'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 🟢 Custom Premium Notice Modal ปิดฉากการสปอยล์ของหน้าต่างเบราว์เซอร์เก่า */}
+      <AnimatePresence>
+        {appNotice.isOpen && (
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              className="w-full max-w-sm rounded-2xl border p-5 text-center space-y-4 shadow-[0_20px_50px_rgba(0,0,0,0.9)]"
+              style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full border flex items-center justify-center mx-auto text-base"
+                style={{
+                  backgroundColor: appNotice.type === 'success' ? 'rgba(0,245,212,0.1)' : appNotice.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(229,184,66,0.1)',
+                  borderColor: appNotice.type === 'success' ? 'rgba(0,245,212,0.2)' : appNotice.type === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(229,184,66,0.2)',
+                  color: appNotice.type === 'success' ? THEME.mint : appNotice.type === 'error' ? '#F87171' : THEME.gold
+                }}
+              >
+                {appNotice.type === 'success' ? <CheckCircle size={22} /> : appNotice.type === 'error' ? <AlertCircle size={22} /> : <Radio size={22} className="animate-pulse" />}
+              </div>
+
+              <div className="space-y-1">
+                <h4 className="text-base font-bold text-white tracking-wide">{appNotice.title}</h4>
+                <p className="text-xs text-[#9E9EAF] leading-relaxed px-1">{appNotice.message}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setAppNotice(prev => ({ ...prev, isOpen: false }))}
+                className="w-full h-10 font-bold rounded-xl text-xs transition-transform active:scale-[0.97] text-white hover:bg-white/5 border border-slate-700"
+              >
+                รับทราบคำแนะนำ
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Pop-up จัดการวันคอนเสิร์ต */}
       {isEventModalOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 transition-all overflow-y-auto">
           <div className="w-full max-w-2xl rounded-2xl p-6 border my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
@@ -810,26 +1107,12 @@ export default function MonitorPage() {
 
             <form onSubmit={handleCreateEventSubmit} className="space-y-5 text-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                
-                {/* ผังปฏิทิน Custom คมชัด */}
                 <div className="space-y-3 p-3 bg-black/30 rounded-2xl border" style={{ borderColor: THEME.border }}>
                   <div className="flex items-center justify-between px-1">
                     <span className="font-bold text-sm text-white">{monthNames[viewMonth]} {viewYear + 543}</span>
                     <div className="flex gap-1">
-                      <button 
-                        type="button" 
-                        onClick={() => { if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); } else { setViewMonth(viewMonth - 1); } }} 
-                        className="p-1 text-xs font-bold text-slate-400 hover:text-white border border-slate-800 rounded bg-black/20"
-                      >
-                        ◀
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => { if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); } else { setViewMonth(viewMonth + 1); } }} 
-                        className="p-1 text-xs font-bold text-slate-400 hover:text-white border border-slate-800 rounded bg-black/20"
-                      >
-                        ▶
-                      </button>
+                      <button type="button" onClick={() => { if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); } else { setViewMonth(viewMonth - 1); } }} className="p-1 text-xs font-bold text-slate-400 hover:text-white border border-slate-800 rounded bg-black/20">◀</button>
+                      <button type="button" onClick={() => { if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); } else { setViewMonth(viewMonth + 1); } }} className="p-1 text-xs font-bold text-slate-400 hover:text-white border border-slate-800 rounded bg-black/20">▶</button>
                     </div>
                   </div>
 
@@ -840,20 +1123,13 @@ export default function MonitorPage() {
                   <div className="grid grid-cols-7 gap-1 text-center font-mono">
                     {calendarDays.map((day, idx) => {
                       if (!day) return <div key={`empty-${idx}`} />;
-                      
                       const checkDateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                       const isSelected = eventDate === checkDateStr;
 
                       return (
                         <button
-                          key={`day-${day}`}
-                          type="button"
-                          onClick={() => selectDateHandler(day)}
-                          className={`h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center ${
-                            isSelected 
-                              ? 'bg-pink-500 text-white shadow-md' 
-                              : 'text-gray-200 hover:bg-white/10 border border-transparent'
-                          }`}
+                          key={`day-${day}`} type="button" onClick={() => selectDateHandler(day)}
+                          className={`h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center ${isSelected ? 'bg-pink-500 text-white shadow-md' : 'text-gray-200 hover:bg-white/10 border border-transparent'}`}
                           style={{ backgroundColor: isSelected ? THEME.pink : '' }}
                         >
                           {day}
@@ -867,25 +1143,12 @@ export default function MonitorPage() {
                   </div>
                 </div>
 
-                {/* รายละเอียดประเภทงานกิจกรรม */}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider text-slate-300">ประเภทของวันกิจกรรม</label>
                     <div className="grid grid-cols-2 gap-1.5 bg-black/30 p-1 rounded-xl border h-11 items-center" style={{ borderColor: THEME.border }}>
-                      <button
-                        type="button" onClick={() => { setEventType('normal'); }}
-                        className="h-8 rounded-lg font-bold text-xs transition-all"
-                        style={{ backgroundColor: eventType === 'normal' ? THEME.purple : 'transparent', color: 'white' }}
-                      >
-                        วันปกติ (ฟรี)
-                      </button>
-                      <button
-                        type="button" onClick={() => { setEventType('concert'); }}
-                        className="h-8 rounded-lg font-bold text-xs transition-all"
-                        style={{ backgroundColor: eventType === 'concert' ? THEME.pink : 'transparent', color: 'white' }}
-                      >
-                        🚀 คอนเสิร์ต
-                      </button>
+                      <button type="button" onClick={() => { setEventType('normal'); }} className="h-8 rounded-lg font-bold text-xs transition-all" style={{ backgroundColor: eventType === 'normal' ? THEME.purple : 'transparent', color: 'white' }}>วันปกติ (ฟรี)</button>
+                      <button type="button" onClick={() => { setEventType('concert'); }} className="h-8 rounded-lg font-bold text-xs transition-all" style={{ backgroundColor: eventType === 'concert' ? THEME.pink : 'transparent', color: 'white' }}>🚀 คอนเสิร์ต</button>
                     </div>
                   </div>
 
@@ -894,58 +1157,30 @@ export default function MonitorPage() {
                       <div className="grid grid-cols-1 gap-3">
                         <div>
                           <label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อคอนเสิร์ต / ศิลปิน</label>
-                          <input 
-                            type="text" placeholder="e.g. Three Man Down Live"
-                            value={eventTitle} onChange={(e) => { setEventTitle(e.target.value); }}
-                            className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500"
-                            style={{ borderColor: THEME.border }}
-                          />
+                          <input type="text" placeholder="e.g. Three Man Down Live" value={eventTitle} onChange={(e) => { setEventTitle(e.target.value); }} className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500" style={{ borderColor: THEME.border }} />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold mb-1 text-gray-300">ราคาค่าบัตรต่อท่าน (บาท)</label>
+                          <label className="block text-xs font-semibold mb-1 text-gray-300">ราคาค่าบัตรเหมาต่อโต๊ะ (บาท)</label>
                           <div className="relative flex items-center">
                             <DollarSign size={15} className="absolute left-3.5 text-amber-400" />
-                            <input 
-                              type="number"
-                              value={eventPrice} onChange={(e) => { setEventPrice(Number(e.target.value)); }}
-                              className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono"
-                              style={{ borderColor: THEME.border }}
-                            />
+                            <input type="number" value={eventPrice} onChange={(e) => { setEventPrice(Number(e.target.value)); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono" style={{ borderColor: THEME.border }} />
                           </div>
                         </div>
                       </div>
-
                       <div>
                         <label className="block text-xs font-semibold mb-1 text-gray-300 flex items-center gap-1"><FileText size={13} /> รายละเอียดของแถม</label>
-                        <textarea
-                          rows={3} placeholder="ตั๋วเข้างานได้ 1 ท่าน ได้มิกเซอร์ฟรีเมื่อมาครบสี่คน..."
-                          value={perksNote} onChange={(e) => { setPerksNote(e.target.value); }}
-                          className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none"
-                          style={{ borderColor: THEME.border }}
-                        />
+                        <textarea rows={3} placeholder="ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." value={perksNote} onChange={(e) => { setPerksNote(e.target.value); }} className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" style={{ borderColor: THEME.border }} />
                       </div>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* กล่องอัปโหลดรูปภาพกางเต็มพื้นที่ 100% */}
               {eventType === 'concert' && (
                 <div className="animate-fade-in mt-2">
-                  <label className="block text-xs font-semibold mb-1.5 text-gray-300 flex items-center gap-1">
-                    <ImageIcon size={13} /> รูปภาพโปสเตอร์ศิลปิน (แนะนำสัดส่วนแนวนอน)
-                  </label>
-                  <div 
-                    className="relative h-48 w-full border border-dashed rounded-xl flex flex-col items-center justify-center bg-black/20 cursor-pointer overflow-hidden group transition-all" 
-                    style={{ borderColor: THEME.border }}
-                  >
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleImageChange} 
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                    />
-                    
+                  <label className="block text-xs font-semibold mb-1.5 text-gray-300 flex items-center gap-1"><ImageIcon size={13} /> รูปภาพโปสเตอร์ศิลปิน</label>
+                  <div className="relative h-48 w-full border border-dashed rounded-xl flex flex-col items-center justify-center bg-black/20 cursor-pointer overflow-hidden group transition-all" style={{ borderColor: THEME.border }}>
+                    <input type="file" accept="image/*" onChange={handleImageChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                     {imagePreview ? (
                       <>
                         <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
@@ -956,11 +1191,8 @@ export default function MonitorPage() {
                       </>
                     ) : (
                       <div className="flex flex-col items-center justify-center">
-                        <div className="p-3 bg-pink-500/10 rounded-full mb-2.5">
-                          <ImageIcon size={24} className="text-pink-500" />
-                        </div>
+                        <div className="p-3 bg-pink-500/10 rounded-full mb-2.5"><ImageIcon size={24} className="text-pink-500" /></div>
                         <p className="text-xs font-bold text-gray-200">คลิกเลือกหรือลากรูปภาพมาวาง</p>
-                        <p className="text-[10px] text-slate-500 mt-1">คลิกอัปโหลดเพื่อแสดงภาพแบนเนอร์กว้างเต็มกล่อง</p>
                       </div>
                     )}
                   </div>
@@ -976,9 +1208,7 @@ export default function MonitorPage() {
 
               <div className="flex justify-end gap-3 pt-4 font-bold border-t border-slate-800" style={{ borderColor: THEME.border }}>
                 <button type="button" onClick={() => { setIsEventModalOpen(false); }} className="px-5 py-2.5 text-xs rounded-xl border text-white border-slate-700">ปิดหน้าต่าง</button>
-                <button type="submit" disabled={eventLoading} className="px-5 py-2.5 text-xs rounded-xl text-black flex items-center gap-1.5 font-bold" style={{ backgroundColor: THEME.gold }}>
-                  {eventLoading ? <Loader2 size={14} className="animate-spin" /> : 'อัปเดตโหมดปฏิทิน'}
-                </button>
+                <button type="submit" disabled={eventLoading} className="px-5 py-2.5 text-xs rounded-xl text-black flex items-center gap-1.5 font-bold" style={{ backgroundColor: THEME.gold }}><Loader2 size={14} className="animate-spin" /> อัปเดตโหมดปฏิทิน</button>
               </div>
             </form>
           </div>
@@ -1001,11 +1231,7 @@ export default function MonitorPage() {
               <div>
                 <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">ประเภทปัญหา</label>
                 <div className="relative flex items-center rounded-xl bg-black/40 border" style={{ borderColor: THEME.border }}>
-                  <select 
-                    value={reportForm.issueType}
-                    onChange={e => setReportForm({...reportForm, issueType: e.target.value})}
-                    className="w-full cursor-pointer appearance-none bg-transparent py-2.5 pl-3 pr-10 text-sm outline-none text-white"
-                  >
+                  <select value={reportForm.issueType} onChange={e => setReportForm({...reportForm, issueType: e.target.value})} className="w-full cursor-pointer appearance-none bg-transparent py-2.5 pl-3 pr-10 text-sm outline-none text-white">
                     <option value="UI Bug / หน้าเว็บเพี้ยน" style={{ backgroundColor: THEME.card }}>UI Bug / หน้าเว็บเพี้ยน</option>
                     <option value="ระบบจองขัดข้อง" style={{ backgroundColor: THEME.card }}>ระบบจองขัดข้อง</option>
                     <option value="ข้อมูลไม่ตรงความเป็นจริง" style={{ backgroundColor: THEME.card }}>ข้อมูลไม่ตรงความเป็นจริง</option>
@@ -1016,14 +1242,7 @@ export default function MonitorPage() {
               </div>
               <div>
                 <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">รายละเอียดของปัญหา</label>
-                <textarea 
-                  rows={4} required
-                  value={reportForm.details}
-                  onChange={e => setReportForm({...reportForm, details: e.target.value})}
-                  placeholder="กรุณาระบุสิ่งที่เกิดขึ้นอย่างละเอียด..."
-                  className="w-full px-3 py-2.5 rounded-xl border outline-none text-sm bg-black/20 resize-none text-white"
-                  style={{ borderColor: THEME.border }}
-                />
+                <textarea rows={4} required value={reportForm.details} onChange={e => setReportForm({...reportForm, details: e.target.value})} placeholder="กรุณาระบุสิ่งที่เกิดขึ้นอย่างละเอียด..." className="w-full px-3 py-2.5 rounded-xl border outline-none text-sm bg-black/20 resize-none text-white" style={{ borderColor: THEME.border }} />
               </div>
               <div className="flex justify-end gap-3 pt-2 font-bold">
                 <button type="button" onClick={() => { setIsReportModalOpen(false); }} className="px-4 py-2 text-xs rounded-xl border hover:bg-white/5 transition-all text-white border-slate-700">ยกเลิก</button>
@@ -1033,6 +1252,21 @@ export default function MonitorPage() {
           </div>
         </div>
       )}
+
+      <style jsx global>{`
+        .custom-date-hide-icon::-webkit-calendar-picker-indicator {
+          background: transparent;
+          bottom: 0;
+          color: transparent;
+          cursor: pointer;
+          height: auto;
+          left: 0;
+          position: absolute;
+          right: 0;
+          top: 0;
+          width: auto;
+        }
+      `}</style>
     </div>
   );
 }
@@ -1058,14 +1292,13 @@ function BookingCard({
 }: { 
   booking: any;
   eventPrice: number;
-  onUpdateStatus: (id: string, nextStatus: 'checked_in' | 'no_show') => Promise<void>;
+  onUpdateStatus: (id: string, nextStatus: 'confirmed' | 'checked_in' | 'no_show') => Promise<void>;
 }) {
   const zone = zoneOf(booking.table_number);
   const derived = deriveStatus(booking);
   let currentMeta = STATUS_META[booking.status] || STATUS_META[derived];
 
-  // คำนวณราคาสุทธิบนการ์ดหน้าร้านรายคิวโดยเอา ราคาบัตรต่อคน คูณ จำนวนผู้ร่วมโต๊ะจริง
-  const totalPaidForThisBooking = eventPrice * (booking.guests_count || 0);
+  const totalPaidForThisBooking = eventPrice;
 
   return (
     <div
@@ -1121,30 +1354,53 @@ function BookingCard({
 
         <div className="mt-4 grid grid-cols-2 gap-y-2.5 text-sm" style={{ color: THEME.muted }}>
           <DetailRow icon={CalendarDays} value={booking.booking_date} />
-          <DetailRow icon={Clock} value={(booking.booking_time || '').slice(0, 5)} />
+          
+          <DetailRow 
+            icon={Clock} 
+            value={
+              booking.booking_time?.includes('19:00') || booking.booking_time === '19:00:00'
+                ? '19:00 - 23:00' 
+                : (booking.booking_time || '').slice(0, 5)
+            } 
+          />
+          
           <DetailRow icon={Users} value={`${booking.guests_count} ท่าน`} />
           <DetailRow icon={Phone} value={booking.phone} />
         </div>
       </div>
 
-      {(!booking.status || booking.status === 'confirmed') && derived !== 'past' ? (
-        <div className="mt-5 pt-3 flex gap-2 border-t" style={{ borderColor: THEME.border }}>
+      <div className="mt-5 pt-3 flex gap-2 border-t" style={{ borderColor: THEME.border }}>
+        {booking.status === 'pending' ? (
           <button
-            onClick={() => onUpdateStatus(booking.id, 'checked_in')}
-            className="flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black text-emerald-400"
+            type="button"
+            onClick={() => onUpdateStatus(booking.id, 'confirmed')}
+            className="w-full py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 text-black hover:opacity-90"
+            style={{ backgroundColor: THEME.gold, boxShadow: `0 2px 10px rgba(229, 184, 66, 0.15)` }}
           >
-            <Check size={14} />
-            เช็คอินเข้าร้าน
+            <Check size={14} className="stroke-[3]" />
+            ยืนยันยอดเงินสำเร็จ
           </button>
-          <button
-            onClick={() => onUpdateStatus(booking.id, 'no_show')}
-            className="flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400"
-          >
-            <X size={14} />
-            No Show
-          </button>
-        </div>
-      ) : null}
+        ) : (!booking.status || booking.status === 'confirmed') && derived !== 'past' ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onUpdateStatus(booking.id, 'checked_in')}
+              className="flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black text-emerald-400"
+            >
+              <Check size={14} />
+              เช็คอินเข้าร้าน
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdateStatus(booking.id, 'no_show')}
+              className="flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400"
+            >
+              <X size={14} />
+              No Show
+            </button>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -8,8 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTriangle, ChevronDown, Coins, QrCode, ArrowRight } from 'lucide-react';
 import FloorPlan from '@/components/booking/FloorPlan';
 
-// 🟢 [ตั้งค่าตรงนี้] ระบุหมายเลขพร้อมเพย์ของร้าน (เบอร์มือถือ หรือ เลขนิติบุคคล/เลขผู้เสียภาษี)
-const SHOP_PROMPTPAY_ID = '08X-XXX-XXXX'; 
+// 🟢 ระบุหมายเลขพร้อมเพย์ของร้าน (เบอร์มือถือ หรือ เลขนิติบุคคล/เลขผู้เสียภาษี)
+const SHOP_PROMPTPAY_ID = 'XXXXXXXXX'; 
 
 // 🟢 กำหนดวันที่เริ่มเข้มงวดการตรวจคิว (จองตั้งแต่วันนี้เป็นต้นไปต้องผ่านสตาฟฟ์เฉพาะวันคอนเสิร์ต)
 const ENFORCE_CHECK_DATE = '2026-07-10';
@@ -54,13 +54,13 @@ export default function BookingPage() {
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [bookingDate, setBookingDate] = useState('');
-  const [bookingTime, setBookingTime] = useState('18:00');
-  const [guestsCount, setGuestsCount] = useState(2);
+  
+  const [bookingTime, setBookingTime] = useState('19:00');
+  const [guestsCount, setGuestsCount] = useState(4);
   
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [dayTables, setDayTables] = useState<Record<string, 'booked' | 'pending'>>({});
   
-  // เก็บค่าบัตรต่อหัวเพื่อส่งไปคำนวณหน้าจ่ายเงินของลูกค้า
   const [currentEventPrice, setCurrentEventPrice] = useState(0);
 
   const formattedShopName = 'ร้าน เรๅ สาขาศรีนครินทร์';
@@ -98,13 +98,14 @@ export default function BookingPage() {
         .from('restaurant_bookings')
         .select('table_number, status')
         .eq('shop_id', shopSlug)
-        .eq('booking_date', targetDate);
+        .eq('booking_date', targetDate)
+        .neq('status', 'no_show'); // 🟢 ตัดโต๊ะที่ถูก 'แคนเซิล' (no_show) ออกตั้งแต่ตอนดึงข้อมูล โต๊ะจะได้ว่างเป็นไฟเขียว
 
       if (error) throw error;
       if (data) {
         const statusMap = data.reduce((acc, curr: any) => ({
           ...acc,
-          [curr.table_number]: curr.status || 'booked'
+          [curr.table_number]: curr.status === 'pending' ? 'pending' : 'booked'
         }), {} as Record<string, 'booked' | 'pending'>);
         setDayTables(statusMap);
       }
@@ -129,10 +130,18 @@ export default function BookingPage() {
           if (!active) return;
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             if (payload.new.booking_date === bookingDate) {
-              setDayTables(prev => ({
-                ...prev,
-                [payload.new.table_number]: payload.new.status || 'booked'
-              }));
+              setDayTables(prev => {
+                const nextState = { ...prev };
+                
+                // 🟢 ถ้ามีการกด 'No Show' (แคนเซิลคิว) จากหลังบ้าน ให้ลบโต๊ะนั้นออกจากลิสต์เพื่อคืนสถานะโต๊ะเป็นไฟเขียว
+                if (payload.new.status === 'no_show') {
+                  delete nextState[payload.new.table_number];
+                } else {
+                  nextState[payload.new.table_number] = payload.new.status === 'pending' ? 'pending' : 'booked';
+                }
+                
+                return nextState;
+              });
             }
           }
           else if (payload.eventType === 'DELETE') {
@@ -167,9 +176,13 @@ export default function BookingPage() {
       return;
     }
 
+    if (guestsCount > 4) {
+      alert('ขออภัยครับ เงื่อนไขของทางร้านจำกัดจำนวนสมาชิกสูงสุด 4 ท่านต่อ 1 โต๊ะอาหารครับ');
+      return;
+    }
+
     setLoading(true);
     try {
-      // 1. ดึงข้อมูลตรวจสอบเช็คว่าเป็นวันคอนเสิร์ตและดึงราคาตั๋วมาคำนวณต่อหัว
       const { data: eventData } = await supabase
         .from('shop_events')
         .select('event_type, price')
@@ -180,10 +193,8 @@ export default function BookingPage() {
       const isConcertDay = eventData?.event_type === 'concert';
       const eventPricePerHead = eventData?.price || 0;
       
-      // บันทึกราคาตั๋วลง State หลักเพื่อใช้คำนวณแสดงผลในหน้าสลิป
       setCurrentEventPrice(eventPricePerHead);
 
-      // 2. Logic คัดกรองสิทธิ์สถานะ 
       const statusToSet = (isConcertDay && bookingDate >= ENFORCE_CHECK_DATE) 
         ? 'pending' 
         : 'confirmed';
@@ -196,7 +207,7 @@ export default function BookingPage() {
         customer_name: customerName,
         phone: phone,
         booking_date: bookingDate,
-        booking_time: `${bookingTime}:00`,
+        booking_time: `${bookingTime}:00`, 
         guests_count: guestsCount,
         table_number: selectedTable,
         status: statusToSet, 
@@ -220,6 +231,27 @@ export default function BookingPage() {
 
       if (data) {
         setSuccessData(data as unknown as BookingRecord);
+        
+        try {
+          await fetch('/api/booking-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'NEW_BOOKING',
+              bookingCode: randomCode,
+              customerName: customerName,
+              phone: phone,
+              tableNumber: selectedTable,
+              date: bookingDate,
+              time: `${bookingTime} น.`, 
+              guests: guestsCount,
+              status: statusToSet
+            })
+          });
+        } catch (lineErr) {
+          console.error('LINE notification webhook failed:', lineErr);
+        }
+
         setStep('success');
       }
 
@@ -231,37 +263,72 @@ export default function BookingPage() {
     }
   };
 
+  // พรีเมียมคอมโพเนนต์ดีไซน์ตั๋ว PDF 
   const handleDownloadPDF = () => {
     if (!successData) return;
     const canvas = document.createElement('canvas');
-    canvas.width = 450; canvas.height = 700; 
+    canvas.width = 450; canvas.height = 720; 
     const ctx = canvas.getContext('2d'); if (!ctx) return;
-    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     const ThaiFont = "'Prompt', 'Thonburi', 'Arial', sans-serif";
-    ctx.textAlign = 'center'; ctx.fillStyle = '#121318'; ctx.font = `bold 22px ${ThaiFont}`; ctx.fillText(formattedShopName, 225, 60);
-    ctx.fillStyle = '#64748B'; ctx.font = `14px ${ThaiFont}`; ctx.fillText(successData.status === 'pending' ? 'ใบยืนยันคิวรอชำระเงิน' : 'ใบยืนยันการจองโต๊ะอาหาร', 225, 88); ctx.fillText('----------------------------------------------------', 225, 115);
-    ctx.fillStyle = '#888888'; ctx.font = `13px ${ThaiFont}`; ctx.fillText('BOOKING CODE', 225, 142);
-    ctx.fillStyle = '#FF1F88'; ctx.font = `bold 36px ${ThaiFont}`; ctx.fillText(successData.booking_code, 225, 185);
-    ctx.textAlign = 'left'; ctx.fillStyle = '#121318'; ctx.font = `16px ${ThaiFont}`;
-    let currentY = 260; const spacing = 32;
-    ctx.fillText(`ชื่อผู้จอง :   ${customerName}`, 50, currentY); currentY += spacing;
-    ctx.fillText(`เบอร์ติดต่อ :  ${successData.phone}`, 50, currentY); currentY += spacing;
-    ctx.fillText(`วันที่จอง :   ${successData.booking_date}`, 50, currentY); currentY += spacing;
-    ctx.fillText(`เวลาเข้าโต๊ะ :  ${successData.booking_time.slice(0, 5)} น.`, 50, currentY); currentY += spacing;
-    ctx.fillText(`จำนวนที่นั่ง :  ${successData.guests_count} ท่าน`, 50, currentY); currentY += spacing;
-    ctx.textAlign = 'center'; ctx.fillStyle = '#64748B'; ctx.fillText('----------------------------------------------------', 225, currentY + 10);
-    ctx.fillStyle = '#475569'; ctx.font = `bold 14px ${ThaiFont}`; ctx.fillText('ASSIGNED STATION TABLE', 225, currentY + 42);
-    ctx.fillStyle = '#E5B842'; ctx.font = `bold 56px ${ThaiFont}`; ctx.fillText(successData.table_number, 225, currentY + 102);
+
+    ctx.fillStyle = '#111116'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#E5B842'; ctx.lineWidth = 4; ctx.strokeRect(15, 15, canvas.width - 30, canvas.height - 30);
+
+    const drawContent = () => {
+      ctx.textAlign = 'center'; ctx.fillStyle = '#FFFFFF'; ctx.font = `bold 24px ${ThaiFont}`; 
+      ctx.fillText(formattedShopName, 225, 120);
+      
+      ctx.fillStyle = '#FF1F88'; ctx.font = `bold 13px ${ThaiFont}`; 
+      ctx.fillText(successData.status === 'pending' ? '★ ใบยืนยันคิวรอชำระเงิน ★' : '★ ใบยืนยันการจองโต๊ะอาหาร ★', 225, 150);
+
+      ctx.strokeStyle = '#2D2235'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
+      ctx.beginPath(); ctx.moveTo(35, 180); ctx.lineTo(415, 180); ctx.stroke(); ctx.setLineDash([]);
+
+      ctx.fillStyle = '#9E9EAF'; ctx.font = `12px ${ThaiFont}`; ctx.fillText('BOOKING CODE', 225, 215);
+      ctx.fillStyle = '#E5B842'; ctx.font = `bold 38px ${ThaiFont}`; ctx.fillText(successData.booking_code, 225, 260);
+
+      ctx.strokeStyle = '#2D2235'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(40, 290); ctx.lineTo(410, 290); ctx.stroke();
+
+      ctx.textAlign = 'left'; ctx.font = `15px ${ThaiFont}`;
+      let currentY = 335; const spacing = 36; const leftCol = 55; const rightCol = 185;
+
+      const items = [
+        { label: 'ชื่อผู้เช็กจอง :', value: customerName },
+        { label: 'เบอร์ติดต่อ :', value: successData.phone },
+        { label: 'วันที่เข้ารับสิทธิ์ :', value: successData.booking_date },
+        { label: 'เวลาล็อกโต๊ะ :', value: `${successData.booking_time.slice(0, 5)} น.` }, 
+        { label: 'จำนวนสมาชิก :', value: `${successData.guests_count} ท่าน (Max 4)` }
+      ];
+
+      items.forEach(item => {
+        ctx.fillStyle = '#9E9EAF'; ctx.fillText(item.label, leftCol, currentY);
+        ctx.fillStyle = '#FFFFFF'; ctx.fillText(item.value, rightCol, currentY);
+        currentY += spacing;
+      });
+
+      ctx.strokeStyle = '#2D2235'; ctx.beginPath(); ctx.moveTo(40, 520); ctx.lineTo(410, 520); ctx.stroke();
+      
+      ctx.textAlign = 'center'; ctx.fillStyle = '#FF1F88'; ctx.font = `bold 12px ${ThaiFont}`;
+      ctx.fillText('ASSIGNED STATION TABLE', 225, 555);
+      
+      ctx.fillStyle = '#E5B842'; ctx.font = `bold 64px ${ThaiFont}`;
+      ctx.fillText(successData.table_number, 225, 630);
+      
+      ctx.fillStyle = '#00F5D4'; ctx.font = `mono 12px`;
+      ctx.fillStyle = '#9E9EAF'; ctx.font = `11px ${ThaiFont}`;
+    };
+
+    drawContent();
+    const doc = new PDFInstance({ orientation: 'p', unit: 'mm', format: [85, 136] });
     const ticketImg = canvas.toDataURL('image/jpeg', 1.0);
-    const doc = new PDFInstance({ orientation: 'p', unit: 'mm', format: [80, 125] });
-    doc.addImage(ticketImg, 'JPEG', 0, 0, 80, 125);
-    doc.save(`SLIP-${successData.booking_code}.pdf`);
+    doc.addImage(ticketImg, 'JPEG', 0, 0, 85, 136);
+    doc.save(`TICKET-${successData.booking_code}.pdf`);
   };
 
   if (!shopExists) { return notFound(); }
 
   const isPendingPayment = successData?.status === 'pending';
-  const calculatedTotalAmount = currentEventPrice * (successData?.guests_count || 0);
+  const calculatedTotalAmount = currentEventPrice; 
 
   return (
     <div className="min-h-screen w-full font-sans select-none flex items-center justify-center p-4 relative overflow-hidden transition-colors duration-300" style={{ backgroundColor: THEME.bg, color: THEME.text }}>
@@ -300,7 +367,6 @@ export default function BookingPage() {
               ) : (
                 <form onSubmit={handleBooking} className="space-y-5 text-base w-full">
                   
-                  {/* แผงกล่องคู่ขนาน วันที่ และ เวลา */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full bg-black/30 p-3 rounded-2xl border" style={{ borderColor: `${THEME.gold}20` }}>
                     <div className="space-y-2 w-full min-w-0">
                       <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 font-mono" style={{ color: THEME.gold }}>
@@ -320,7 +386,7 @@ export default function BookingPage() {
 
                     <div className="space-y-2 w-full">
                       <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                        <Clock size={15} /> ระบุเวลาเข้าโต๊ะ
+                        <Clock size={15} /> 2. ระบุเวลาเข้าโต๊ะ
                       </label>
                       <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
                         <select 
@@ -328,19 +394,20 @@ export default function BookingPage() {
                           onChange={(e) => setBookingTime(e.target.value)} 
                           className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-medium"
                         >
-                          {['17:00', '18:00', '19:00', '20:00', '21:00', '22:00'].map(t => (
-                            <option key={t} value={t} style={{ backgroundColor: THEME.card }}>{t} น.</option>
-                          ))}
+                          <option value="19:00" style={{ backgroundColor: THEME.card }}>19:00 น. </option>
+                          <option value="20:00" style={{ backgroundColor: THEME.card }}>20:00 น. </option>
+                          <option value="21:00" style={{ backgroundColor: THEME.card }}>21:00 น. </option>
+                          <option value="22:00" style={{ backgroundColor: THEME.card }}>22:00 น. </option>
+                          <option value="23:00" style={{ backgroundColor: THEME.card }}>23:00 น.</option>
                         </select>
                         <ChevronDown size={16} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} />
                       </div>
                     </div>
                   </div>
 
-                  {/* แผนผังร้านค้า */}
                   <div className="space-y-2 w-full">
                     <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-200 leading-tight">
-                      2. คลิกเลือกตำแหน่งโต๊ะอาหารบนแผนผังร้าน
+                      3. คลิกเลือกตำแหน่งโต๊ะอาหารบนแผนผังร้าน
                     </label>
                     <div className="w-full rounded-2xl bg-black/40 p-1 border box-sizing-border overflow-x-auto select-none relative min-h-[220px] flex items-center justify-center transition-all duration-300" style={{ borderColor: THEME.border }}>
                       {bookingDate ? (
@@ -351,7 +418,7 @@ export default function BookingPage() {
                         />
                       ) : (
                         <div className="text-center p-8 space-y-2.5 animate-pulse">
-                          <div className="w-10 h-10 rounded-full bg-black/40 border text-flex items-center justify-center mx-auto mb-1 flex justify-center items-center" style={{ borderColor: `${THEME.gold}30`, color: THEME.gold }}>
+                          <div className="w-10 h-10 rounded-full bg-black/40 border flex items-center justify-center mx-auto mb-1" style={{ borderColor: `${THEME.gold}30`, color: THEME.gold }}>
                             <AlertTriangle size={18} />
                           </div>
                           <p className="text-sm font-bold" style={{ color: THEME.gold }}>กรุณาเลือก "วันที่ต้องการจอง" ด้านบนก่อนครับ</p>
@@ -361,7 +428,6 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  {/* ข้อมูลผู้จอง */}
                   <div className="space-y-4 pt-1 w-full">
                     <div className="space-y-2 w-full">
                       <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
@@ -398,17 +464,17 @@ export default function BookingPage() {
 
                       <div className="space-y-2 w-full">
                         <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                          <Users size={16} style={{ color: THEME.pink }} /> จำนวนผู้ร่วมโต๊ะ
+                          <Users size={16} style={{ color: THEME.pink }} /> จำนวนสมาชิก (ไม่เกิน 4 ท่าน)
                         </label>
                         <div className="relative flex items-center rounded-xl border bg-black/20 w-full h-12 transition-all duration-200" style={{ borderColor: THEME.border, opacity: bookingDate ? 1 : 0.3 }}>
                           <select 
                             disabled={!bookingDate}
                             value={guestsCount} 
                             onChange={(e) => setGuestsCount(Number(e.target.value))} 
-                            className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-medium disabled:cursor-not-allowed box-border"
+                            className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-bold disabled:cursor-not-allowed box-border text-pink-400"
                           >
-                            {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                              <option key={n} value={n} style={{ backgroundColor: THEME.card }}>{n} ท่าน</option>
+                            {[1, 2, 3, 4].map(n => (
+                              <option key={n} value={n} style={{ backgroundColor: THEME.card, color: '#FFFFFF' }}>{n} ท่าน</option>
                             ))}
                           </select>
                           <ChevronDown size={16} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} />
@@ -442,7 +508,6 @@ export default function BookingPage() {
               <div className="absolute w-4 h-8 border border-l-0 rounded-r-full top-1/2 -left-0.5 -translate-y-1/2" style={{ backgroundColor: THEME.bg, borderColor: THEME.border }} />
               <div className="absolute w-4 h-8 border border-r-0 rounded-l-full top-1/2 -right-0.5 -translate-y-1/2" style={{ backgroundColor: THEME.bg, borderColor: THEME.border }} />
 
-              {/* หัวการ์ดไดนามิกแยกตามสถานะคิว */}
               <div className="space-y-2">
                 <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto border ${isPendingPayment ? 'bg-amber-500/10 border-amber-500/20 text-amber-400 animate-pulse' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>
                   {isPendingPayment ? <QrCode size={24} /> : <CheckCircle2 size={24} />}
@@ -457,7 +522,6 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              {/* 🔮 แผงโชว์ Dynamic PromptPay QR Code ล็อกยอดเงินอัจฉริยะ */}
               {isPendingPayment && (
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center space-y-2 bg-white p-4 rounded-2xl mx-auto w-56 shadow-[0_0_30px_rgba(229,184,66,0.15)] border border-amber-500/40">
                   <div className="w-full flex items-center justify-between text-[10px] font-bold text-blue-900 font-sans tracking-wide px-0.5 pb-1 border-b border-gray-100">
@@ -480,7 +544,6 @@ export default function BookingPage() {
                 </motion.div>
               )}
 
-              {/* ตั๋วข้อมูลสรุปคิวจอง */}
               <div className="bg-black/40 border border-dashed rounded-2xl p-4 space-y-2.5 text-xs sm:text-sm font-mono text-left" style={{ borderColor: THEME.border }}>
                 <div className="flex justify-between border-b pb-1.5" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
                   <span style={{ color: THEME.muted }}>BOOKING CODE</span>
@@ -494,17 +557,18 @@ export default function BookingPage() {
                   <span style={{ color: THEME.muted }}>DATE</span>
                   <span className="font-sans text-gray-200">{successData?.booking_date}</span>
                 </div>
+                
                 <div className="flex justify-between">
                   <span style={{ color: THEME.muted }}>ARRIVAL TIME</span>
                   <span className="font-sans text-gray-200">{successData?.booking_time?.slice(0, 5)} น.</span>
                 </div>
+                
                 <div className="flex justify-between">
                   <span style={{ color: THEME.muted }}>GUESTS</span>
                   <span className="font-sans text-gray-200">{successData?.guests_count} ท่าน</span>
                 </div>
               </div>
 
-              {/* ข้อความแจ้งเตือนคำแนะนำวิธีแนบสลิปส่งทางไลน์ */}
               {isPendingPayment && (
                 <div className="p-3 text-left bg-black/20 rounded-2xl border border-slate-800 text-xs text-slate-400 space-y-1.5 font-sans leading-relaxed">
                   <p className="text-gray-200 font-bold flex items-center gap-1.5">
@@ -516,12 +580,11 @@ export default function BookingPage() {
                 </div>
               )}
 
-              {/* แผงควบคุมปุ่มกดออก */}
               <div className="space-y-2 pt-1 text-sm">
                 <button onClick={handleDownloadPDF} className="w-full py-3 bg-emerald-500 text-[#121318] font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10 transition-all active:scale-95 hover:opacity-90">
                   <Download size={15} /> ดาวน์โหลดใบยืนยันคิว PDF
                 </button>
-                <button onClick={() => { setStep('form'); setCustomerName(''); setPhone(''); setSelectedTable(null); }} className="w-full py-2.5 border bg-transparent hover:bg-white/5 rounded-xl transition-colors" style={{ borderColor: THEME.border, color: THEME.muted }}>
+                <button onClick={() => { setStep('form'); setCustomerName(''); setPhone(''); setSelectedTable(null); fetchTodayBookings(bookingDate); }} className="w-full py-2.5 border bg-transparent hover:bg-white/5 rounded-xl transition-colors" style={{ borderColor: THEME.border, color: THEME.muted }}>
                   ออกจากการจอง
                 </button>
               </div>
@@ -534,7 +597,6 @@ export default function BookingPage() {
         .color-scheme-dark { color-scheme: dark; }
         .box-sizing-border { box-sizing: border-box; }
         
-        /* 📱 🔮 [แก้ไขจุดนี้] บังคับขยายท่อความสูงเป็น 100% เพื่อให้ Flexbox ดึงข้อความมาอยู่กึ่งกลางแนวตั้งเป๊ะ ๆ */
         input[type="date"]::-webkit-date-and-time-value {
           color: #F1F1F5 !important;
           text-align: left;
