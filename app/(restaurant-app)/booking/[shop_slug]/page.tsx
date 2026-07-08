@@ -300,7 +300,7 @@ export default function BookingPage() {
               ) : (
                 <form onSubmit={handleBooking} className="space-y-5 text-base w-full">
                   
-                  {/* 📊 [อัปเดตยกเครื่องใหม่] ปรับสถาปัตยกรรมกล่องคู่ขนาน วันที่ และ เวลา ให้เท่ากันเป๊ะ 100% */}
+                  {/* แผงกล่องคู่ขนาน วันที่ และ เวลา */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full bg-black/30 p-3 rounded-2xl border" style={{ borderColor: `${THEME.gold}20` }}>
                     <div className="space-y-2 w-full min-w-0">
                       <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 font-mono" style={{ color: THEME.gold }}>
@@ -534,13 +534,16 @@ export default function BookingPage() {
         .color-scheme-dark { color-scheme: dark; }
         .box-sizing-border { box-sizing: border-box; }
         
-        /* 📱 🔮 บังคับให้สีตัวหนังสือของวันจองบน iOS และ WebView สว่าง และจัดโครงสร้างให้ยืดเต็มกรอบแบบเสถียร */
+        /* 📱 🔮 [แก้ไขจุดนี้] บังคับขยายท่อความสูงเป็น 100% เพื่อให้ Flexbox ดึงข้อความมาอยู่กึ่งกลางแนวตั้งเป๊ะ ๆ */
         input[type="date"]::-webkit-date-and-time-value {
           color: #F1F1F5 !important;
           text-align: left;
           display: flex;
           align-items: center;
-          min-height: 24px;
+          min-height: 100% !important;
+          height: 100% !important;
+          padding: 0 !important;
+          margin: 0 !important;
         }
         input[type="date"] {
           appearance: none !important;
