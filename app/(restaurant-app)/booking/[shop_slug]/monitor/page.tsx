@@ -428,7 +428,7 @@ export default function MonitorPage() {
 
       setReportForm({ issueType: 'ระบบจองขัดข้อง', details: '' });
       setIsReportModalOpen(false);
-      alert('ระบบกำลังเปิดแอปอีเมลเพื่อส่งรายงานปัญหาไปยังบอสครับ!');
+      alert('ระบบกำลังเปิดแอปอีเมลเพื่อส่งรายงานปัญหาครับ');
     } catch (err) {
       console.error(err);
       alert('เกิดข้อผิดพลาดในการเรียกแอปส่งอีเมล');

@@ -237,12 +237,12 @@ export default function BookingPage() {
     canvas.width = 450; canvas.height = 700; 
     const ctx = canvas.getContext('2d'); if (!ctx) return;
     ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const thaiFont = "'Prompt', 'Thonburi', 'Arial', sans-serif";
-    ctx.textAlign = 'center'; ctx.fillStyle = '#121318'; ctx.font = `bold 22px ${thaiFont}`; ctx.fillText(formattedShopName, 225, 60);
-    ctx.fillStyle = '#64748B'; ctx.font = `14px ${thaiFont}`; ctx.fillText(successData.status === 'pending' ? 'ใบยืนยันคิวรอชำระเงิน' : 'ใบยืนยันการจองโต๊ะอาหาร', 225, 88); ctx.fillText('----------------------------------------------------', 225, 115);
-    ctx.fillStyle = '#888888'; ctx.font = `13px ${thaiFont}`; ctx.fillText('BOOKING CODE', 225, 142);
-    ctx.fillStyle = '#FF1F88'; ctx.font = `bold 36px ${thaiFont}`; ctx.fillText(successData.booking_code, 225, 185);
-    ctx.textAlign = 'left'; ctx.fillStyle = '#121318'; ctx.font = `16px ${thaiFont}`;
+    const ThaiFont = "'Prompt', 'Thonburi', 'Arial', sans-serif";
+    ctx.textAlign = 'center'; ctx.fillStyle = '#121318'; ctx.font = `bold 22px ${ThaiFont}`; ctx.fillText(formattedShopName, 225, 60);
+    ctx.fillStyle = '#64748B'; ctx.font = `14px ${ThaiFont}`; ctx.fillText(successData.status === 'pending' ? 'ใบยืนยันคิวรอชำระเงิน' : 'ใบยืนยันการจองโต๊ะอาหาร', 225, 88); ctx.fillText('----------------------------------------------------', 225, 115);
+    ctx.fillStyle = '#888888'; ctx.font = `13px ${ThaiFont}`; ctx.fillText('BOOKING CODE', 225, 142);
+    ctx.fillStyle = '#FF1F88'; ctx.font = `bold 36px ${ThaiFont}`; ctx.fillText(successData.booking_code, 225, 185);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#121318'; ctx.font = `16px ${ThaiFont}`;
     let currentY = 260; const spacing = 32;
     ctx.fillText(`ชื่อผู้จอง :   ${customerName}`, 50, currentY); currentY += spacing;
     ctx.fillText(`เบอร์ติดต่อ :  ${successData.phone}`, 50, currentY); currentY += spacing;
@@ -250,8 +250,8 @@ export default function BookingPage() {
     ctx.fillText(`เวลาเข้าโต๊ะ :  ${successData.booking_time.slice(0, 5)} น.`, 50, currentY); currentY += spacing;
     ctx.fillText(`จำนวนที่นั่ง :  ${successData.guests_count} ท่าน`, 50, currentY); currentY += spacing;
     ctx.textAlign = 'center'; ctx.fillStyle = '#64748B'; ctx.fillText('----------------------------------------------------', 225, currentY + 10);
-    ctx.fillStyle = '#475569'; ctx.font = `bold 14px ${thaiFont}`; ctx.fillText('ASSIGNED STATION TABLE', 225, currentY + 42);
-    ctx.fillStyle = '#E5B842'; ctx.font = `bold 56px ${thaiFont}`; ctx.fillText(successData.table_number, 225, currentY + 102);
+    ctx.fillStyle = '#475569'; ctx.font = `bold 14px ${ThaiFont}`; ctx.fillText('ASSIGNED STATION TABLE', 225, currentY + 42);
+    ctx.fillStyle = '#E5B842'; ctx.font = `bold 56px ${ThaiFont}`; ctx.fillText(successData.table_number, 225, currentY + 102);
     const ticketImg = canvas.toDataURL('image/jpeg', 1.0);
     const doc = new PDFInstance({ orientation: 'p', unit: 'mm', format: [80, 125] });
     doc.addImage(ticketImg, 'JPEG', 0, 0, 80, 125);
@@ -300,8 +300,8 @@ export default function BookingPage() {
               ) : (
                 <form onSubmit={handleBooking} className="space-y-5 text-base w-full">
                   
-                  {/* วันที่และเวลา */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full bg-black/30 p-3 rounded-2xl border" style={{ borderColor: `${THEME.gold}20` }}>
+                  {/* 🛠️ [แก้ไขจุดนี้] วันที่และเวลา ปรับเป็น md:grid-cols-2 เพื่อป้องกัน UI แตกในโมบาย */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full bg-black/30 p-3 rounded-2xl border" style={{ borderColor: `${THEME.gold}20` }}>
                     <div className="space-y-2 w-full min-w-0">
                       <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 font-mono" style={{ color: THEME.gold }}>
                         <Calendar size={15} /> 1. เลือกวันที่ต้องการจอง
@@ -378,7 +378,8 @@ export default function BookingPage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                    {/* 🛠️ [แก้ไขจุดนี้เช่นกัน] ปรับเป็น md:grid-cols-2 เพื่อให้ฟอร์มล่างสมมาตรกันและไม่แตกบนหน้าจอมือถือขนาดใหญ่ */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                       <div className="space-y-2 w-full">
                         <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
                           <Phone size={16} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ
