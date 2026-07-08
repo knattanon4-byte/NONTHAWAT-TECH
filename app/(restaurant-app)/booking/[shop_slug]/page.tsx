@@ -300,28 +300,29 @@ export default function BookingPage() {
               ) : (
                 <form onSubmit={handleBooking} className="space-y-5 text-base w-full">
                   
-                  {/* 🛠️ [แก้ไขจุดนี้] วันที่และเวลา ปรับเป็น md:grid-cols-2 เพื่อป้องกัน UI แตกในโมบาย */}
+                  {/* 📊 [อัปเดตยกเครื่องใหม่] ปรับสถาปัตยกรรมกล่องคู่ขนาน วันที่ และ เวลา ให้เท่ากันเป๊ะ 100% */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full bg-black/30 p-3 rounded-2xl border" style={{ borderColor: `${THEME.gold}20` }}>
                     <div className="space-y-2 w-full min-w-0">
                       <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 font-mono" style={{ color: THEME.gold }}>
                         <Calendar size={15} /> 1. เลือกวันที่ต้องการจอง
                       </label>
-                      <input 
-                        type="date" 
-                        required 
-                        min={new Date().toISOString().split('T')[0]} 
-                        value={bookingDate} 
-                        onChange={(e) => setBookingDate(e.target.value)} 
-                        className="w-full bg-black/40 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base color-scheme-dark block min-w-0 box-sizing-border focus:border-amber-400" 
-                        style={{ borderColor: THEME.border }} 
-                      />
+                      <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
+                        <input 
+                          type="date" 
+                          required 
+                          min={new Date().toISOString().split('T')[0]} 
+                          value={bookingDate} 
+                          onChange={(e) => setBookingDate(e.target.value)} 
+                          className="w-full h-full appearance-none bg-transparent px-4 text-white outline-none text-base color-scheme-dark block min-w-0 box-border iOS-date-input" 
+                        />
+                      </div>
                     </div>
 
                     <div className="space-y-2 w-full">
                       <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
                         <Clock size={15} /> ระบุเวลาเข้าโต๊ะ
                       </label>
-                      <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12" style={{ borderColor: THEME.border }}>
+                      <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
                         <select 
                           value={bookingTime} 
                           onChange={(e) => setBookingTime(e.target.value)} 
@@ -373,12 +374,11 @@ export default function BookingPage() {
                         placeholder={bookingDate ? "กรอกชื่อและนามสกุลของคุณ..." : "กรุณาเลือกวันที่ด้านบนก่อน..."} 
                         value={customerName} 
                         onChange={(e) => setCustomerName(e.target.value)} 
-                        className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 disabled:opacity-30 disabled:cursor-not-allowed focus:border-purple-500" 
+                        className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 disabled:opacity-30 disabled:cursor-not-allowed focus:border-purple-500 box-border" 
                         style={{ borderColor: THEME.border }} 
                       />
                     </div>
 
-                    {/* 🛠️ [แก้ไขจุดนี้เช่นกัน] ปรับเป็น md:grid-cols-2 เพื่อให้ฟอร์มล่างสมมาตรกันและไม่แตกบนหน้าจอมือถือขนาดใหญ่ */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                       <div className="space-y-2 w-full">
                         <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
@@ -391,7 +391,7 @@ export default function BookingPage() {
                           placeholder={bookingDate ? "08X-XXX-XXXX" : "กรุณาเลือกวันที่ด้านบนก่อน..."} 
                           value={phone} 
                           onChange={(e) => setPhone(e.target.value)} 
-                          className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 disabled:opacity-30 disabled:cursor-not-allowed focus:border-purple-500" 
+                          className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 disabled:opacity-30 disabled:cursor-not-allowed focus:border-purple-500 box-border" 
                           style={{ borderColor: THEME.border }} 
                         />
                       </div>
@@ -405,7 +405,7 @@ export default function BookingPage() {
                             disabled={!bookingDate}
                             value={guestsCount} 
                             onChange={(e) => setGuestsCount(Number(e.target.value))} 
-                            className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-medium disabled:cursor-not-allowed"
+                            className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-medium disabled:cursor-not-allowed box-border"
                           >
                             {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
                               <option key={n} value={n} style={{ backgroundColor: THEME.card }}>{n} ท่าน</option>
@@ -457,7 +457,7 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              {/* 🔮 [เพิ่มใหม่] แผงโชว์ Dynamic PromptPay QR Code ล็อกยอดเงินอัจฉริยะ */}
+              {/* 🔮 แผงโชว์ Dynamic PromptPay QR Code ล็อกยอดเงินอัจฉริยะ */}
               {isPendingPayment && (
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center space-y-2 bg-white p-4 rounded-2xl mx-auto w-56 shadow-[0_0_30px_rgba(229,184,66,0.15)] border border-amber-500/40">
                   <div className="w-full flex items-center justify-between text-[10px] font-bold text-blue-900 font-sans tracking-wide px-0.5 pb-1 border-b border-gray-100">
@@ -533,6 +533,21 @@ export default function BookingPage() {
       <style jsx global>{`
         .color-scheme-dark { color-scheme: dark; }
         .box-sizing-border { box-sizing: border-box; }
+        
+        /* 📱 🔮 บังคับให้สีตัวหนังสือของวันจองบน iOS และ WebView สว่าง และจัดโครงสร้างให้ยืดเต็มกรอบแบบเสถียร */
+        input[type="date"]::-webkit-date-and-time-value {
+          color: #F1F1F5 !important;
+          text-align: left;
+          display: flex;
+          align-items: center;
+          min-height: 24px;
+        }
+        input[type="date"] {
+          appearance: none !important;
+          -webkit-appearance: none !important;
+          color-scheme: dark !important;
+          color: #F1F1F5 !important;
+        }
       `}</style>
     </div>
   );
