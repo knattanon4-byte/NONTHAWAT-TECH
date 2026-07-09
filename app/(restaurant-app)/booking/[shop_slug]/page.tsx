@@ -9,7 +9,7 @@ import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTrian
 import FloorPlan from '@/components/booking/FloorPlan';
 
 // 🟢 ระบุหมายเลขพร้อมเพย์ของร้าน (เบอร์มือถือ หรือ เลขนิติบุคคล/เลขผู้เสียภาษี)
-const SHOP_PROMPTPAY_ID = 'XXXXXXXXX'; 
+const SHOP_PROMPTPAY_ID = '0922657200'; 
 
 // 🟢 กำหนดวันที่เริ่มเข้มงวดการตรวจคิว (จองตั้งแต่วันนี้เป็นต้นไปต้องผ่านสตาฟฟ์เฉพาะวันคอนเสิร์ต)
 const ENFORCE_CHECK_DATE = '2026-07-10';
