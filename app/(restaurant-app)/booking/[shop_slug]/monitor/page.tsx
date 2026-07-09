@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'framer-motion'; 
 import {
   Search,
@@ -427,7 +428,7 @@ export default function MonitorPage() {
     } catch (err: any) {
       console.error(err);
       triggerNotice('error', 'คำสั่งขัดข้อง', err.message || 'ระบบหลังบ้านพังกระจาย ส่งสัญญาไปตรวจสอบไฟล์จองไม่สำเร็จ');
-    } finally {
+    } finally { 
       setIsLockProcessing(false);
     }
   };
@@ -613,12 +614,11 @@ export default function MonitorPage() {
     [bookings]
   );
 
-  // 🟢 จุดอัปเดตสำคัญ 1: แก้ไขผังร้านหลังบ้านให้เข้าใจสถานะ 'confirmed' ว่าคือการที่โต๊ะนั้นโดนล็อก (booked)
   const adminDayTablesMap = useMemo(() => {
     const dayBookings = bookings.filter(b => b.booking_date === adminSelectedDate && b.status !== 'no_show');
     return dayBookings.reduce((acc, curr) => ({
       ...acc,
-      [curr.table_number]: curr.status === 'pending' ? 'pending' : 'booked' // เปลี่ยนตรงนี้เพื่อให้ confirmed = ไฟแดง
+      [curr.table_number]: curr.status === 'pending' ? 'pending' : 'booked'
     }), {} as Record<string, 'booked' | 'pending'>);
   }, [bookings, adminSelectedDate]);
 
@@ -952,11 +952,12 @@ export default function MonitorPage() {
               </div>
 
               <div className="w-full rounded-3xl bg-[#16161E] border border-[#2D2235] p-6 flex items-center justify-center min-h-[450px] overflow-x-auto shadow-inner">
+                {/* 🟢 [จุดที่อัปเดต] เปลี่ยนการส่ง Props ให้แมตช์กับ FloorPlan อัปเดตล่าสุด */}
                 <FloorPlan 
                   selectedTable={selectedTable}
-                  setSelectedTable={(tableNum) => {
+                  onTableClick={(tableNum: string) => {
                     setSelectedTable(tableNum);
-                    if (tableNum) handleAdminLockTableClick(tableNum);
+                    handleAdminLockTableClick(tableNum);
                   }}
                   dayTables={adminDayTablesMap}
                 />
@@ -1378,7 +1379,7 @@ function BookingCard({
             style={{ backgroundColor: THEME.gold, boxShadow: `0 2px 10px rgba(229, 184, 66, 0.15)` }}
           >
             <Check size={14} className="stroke-[3]" />
-            ยืนยันยอดเงินสำเร็จ
+            ยืนยันรับยอดเงินสำเร็จ
           </button>
         ) : (!booking.status || booking.status === 'confirmed') && derived !== 'past' ? (
           <>

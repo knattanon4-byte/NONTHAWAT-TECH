@@ -9,10 +9,12 @@ interface TableData {
   status: string;
 }
 
-// 🌟 [ปรับปรุง Props] รับค่าวัตถุแมปสถานะรายวันเข้ามาเพื่อประมวลผลสองสถานะ (แดง/เหลือง)
+// 🟢 [ปรับปรุงครั้งสุดท้าย] ทำให้ Props ยืดหยุ่น รองรับทั้งการส่งแบบเดี่ยว (Monitor) และแบบกลุ่ม (Booking/Dashboard)
 interface FloorPlanProps {
-  selectedTable: string | null;
-  setSelectedTable: (tableId: string | null) => void;
+  selectedTables?: string[];
+  setSelectedTables?: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedTable?: string | null;              // 🌟 รองรับหน้าแอดมินเดิม
+  onTableClick?: (tableId: string) => void;   // 🌟 รองรับ Event จิ้มล็อกโต๊ะทันทีของหน้า Monitor
   dayTables?: Record<string, 'booked' | 'pending'>; 
 }
 
@@ -82,7 +84,13 @@ const RESTAURANT_TABLES = [
   { id: 'S1', label: 'S1', cx: 355, cy: 408 }
 ];
 
-export default function FloorPlan({ selectedTable, setSelectedTable, dayTables = {} }: FloorPlanProps) {
+export default function FloorPlan({ 
+  selectedTables = [], 
+  setSelectedTables, 
+  selectedTable = null, 
+  onTableClick, 
+  dayTables = {} 
+}: FloorPlanProps) {
   const [tables, setTables] = useState<Record<string, TableData>>({})
 
   useEffect(() => {
@@ -96,22 +104,19 @@ export default function FloorPlan({ selectedTable, setSelectedTable, dayTables =
     fetchTables()
   }, [])
 
-  // 🌟 [มิติการคำนวณเฉดสีรายวัน] 
   const getTableStyle = (tableId: string) => {
     const dayStatus = dayTables[tableId];
 
-    // 🛑 ด่านที่ 1: จองเสร็จสมบูรณ์แล้วในวันนี้ -> พ่นสีแดงกั้นถาวร
     if (dayStatus === 'booked') {
       return 'fill-red-500/90 stroke-red-700 cursor-not-allowed';
     }
     
-    // 🟡 ด่านที่ 2: มีคนจองแล้วกำลังรอจ่ายเงินวันนี้ -> พ่นสีเหลืองทองกะพริบแจ้งสิทธิ์และล็อกทันที!
     if (dayStatus === 'pending') {
       return 'fill-amber-500 stroke-amber-600 animate-pulse cursor-not-allowed';
     }
 
-    // 🔵 ด่านที่ 3: โต๊ะที่ผู้ใช้คนปัจจุบันกำลังคลิกจิ้มอยู่ -> สีฟ้าสว่าง
-    if (selectedTable === tableId) {
+    // 🌟 ไฮไลท์สีฟ้า: เช็กโครงสร้างทั้งแบบ Array และแบบเดี่ยวร่วมกัน
+    if (selectedTables.includes(tableId) || selectedTable === tableId) {
       return 'fill-sky-400 stroke-white stroke-[2px] animate-pulse cursor-pointer';
     }
 
@@ -120,14 +125,27 @@ export default function FloorPlan({ selectedTable, setSelectedTable, dayTables =
       return 'fill-slate-800 stroke-slate-700 cursor-not-allowed opacity-40';
     }
 
-    // 🟢 นอกเหนือจากนี้คือ โต๊ะว่างสีเขียวสมบูรณ์
     return 'fill-emerald-500 hover:fill-emerald-400 stroke-emerald-700 cursor-pointer transition-all';
   }
 
   const handleTableClick = (tableId: string) => {
-    // 🛑 ดักห้ามจิ้มซ้ำถ้าโต๊ะติดจองเด็ดขาด (ไม่ว่าจะเหลืองหรือแดง หรือโต๊ะพังมาสเตอร์)
     if (dayTables[tableId] === 'booked' || dayTables[tableId] === 'pending' || tables[tableId]?.status === 'broken') return;
-    setSelectedTable(tableId);
+    
+    // 🌟 ถ้าหน้า Monitor ส่งฟังก์ชัน callback มา ให้รันตัวนี้แล้วจบงานทันที
+    if (onTableClick) {
+      onTableClick(tableId);
+      return;
+    }
+
+    // ระบบจัดกลุ่ม Array สำหรับหน้า Booking ของลูกค้า
+    if (setSelectedTables) {
+      setSelectedTables((prev) => {
+        if (prev.includes(tableId)) {
+          return prev.filter((id) => id !== tableId);
+        }
+        return [...prev, tableId];
+      });
+    }
   }
 
   return (
@@ -147,7 +165,7 @@ export default function FloorPlan({ selectedTable, setSelectedTable, dayTables =
               <svg viewBox="0 0 393 852" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-auto h-full max-h-full cursor-grab active:cursor-grabbing transition-shadow mx-auto">
                 <g clipPath="url(#clip0_2002_2)">
                   <rect width="393" height="852" fill="#020617"/>
-                  <line x1="2" y1="197.5" x2="116" y2="197.5" stroke="#334155"/><line x1="108.5" y1="197" x2="108.5" y2="181" stroke="#334155"/><line x1="108" y1="180.5" x2="285" y2="180.5" stroke="#334155"/><line x1="285" y1="202.012" x2="285" y2="181.988" stroke="#334155"/><line x1="276.5" y1="202.012" x2="276.5" y2="181.988" stroke="#334155"/><line x1="116.5" y1="181" x2="116.5" y2="268" stroke="#334155"/><line x1="276" y1="200.5" x2="285" y2="200.5" stroke="#334155"/><line x1="286" y1="201.5" x2="357" y2="201.5" stroke="#334155"/><line x1="357.5" y1="201" x2="357.5" y2="294" stroke="#334155"/><line x1="357.01" y1="292.75" x2="324.998" y2="292.75" stroke="#334155"/><line x1="325.392" y1="292.31" x2="295.392" y2="330.31" stroke="#334155"/><line x1="295.5" y1="331" x2="295.5" y2="390" stroke="#334155"/><line x1="295" y1="389.5" x2="307" y2="389.5" stroke="#334155"/><line x1="324" y1="389.5" x2="378" y2="389.5" stroke="#334155"/><line x1="324.5" y1="389" x2="324.5" y2="378" stroke="#334155"/><line x1="31.5" y1="197" x2="31.5" y2="191" stroke="#334155"/><line x1="40.5" y1="197" x2="40.5" y2="191" stroke="#334155"/><line x1="31" y1="190.5" x2="41" y2="190.5" stroke="#334155"/><line x1="2.5" y1="197" x2="2.5" y2="543" stroke="#334155"/>
+                  <line x1="2" y1="197.5" x2="116" y2="197.5" stroke="#334155"/><line x1="108.5" y1="197" x2="108.5" y2="181" stroke="#334155"/><line x1="108" y1="180.5" x2="285" y2="180.5" stroke="#334155"/><line x1="285" y1="202.012" x2="285" y2="181.988" stroke="#334155"/><line x1="276.5" y1="202.012" x2="276.5" y2="181.988" stroke="#334155"/><line x1="116.5" y1="181" x2="116.5" y2="268" stroke="#334155"/><line x1="276" y1="200.5" x2="285" y2="200.5" stroke="#334155"/><line x1="286" y1="201.5" x2="357" y2="201.5" stroke="#334155"/><line x1="357.5" y1="201" x2="357.5" y2="294" stroke="#334155"/><line x1="357.01" y1="292.75" x2="324.998" y2="292.75" stroke="#334155"/><line x1="325.392" y1="292.31" x2="295.392" y2="330.31" stroke="#334155"/><line x1="295.5" y1="331" x2="295.5" y2="390" stroke="#334155"/><line x1="295" y1="389.5" x2="307" y2="389.5" stroke="#334155"/><line x1="324" y1="389.5" x2="378" y="389.5" stroke="#334155"/><line x1="324.5" y1="389" x2="324.5" y2="378" stroke="#334155"/><line x1="31.5" y1="197" x2="31.5" y2="191" stroke="#334155"/><line x1="40.5" y1="197" x2="40.5" y2="191" stroke="#334155"/><line x1="31" y1="190.5" x2="41" y2="190.5" stroke="#334155"/><line x1="2.5" y1="197" x2="2.5" y2="543" stroke="#334155"/>
                   {RESTAURANT_TABLES.map((t) => (
                     <g key={t.id}>
                       <circle cx={t.cx} cy={t.cy} r="8.5" className={getTableStyle(t.id)} onClick={() => handleTableClick(t.id)} />
