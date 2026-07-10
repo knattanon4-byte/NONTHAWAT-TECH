@@ -5,13 +5,12 @@ import { useParams, notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { jsPDF as PDFInstance } from 'jspdf';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTriangle, ChevronDown, QrCode, ArrowRight, Plus, Minus, X } from 'lucide-react';
+import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTriangle, ChevronDown, QrCode, ArrowRight, Plus, Minus, X, Music } from 'lucide-react';
 import FloorPlan from '@/components/booking/FloorPlan';
 
-// 🟢 ระบุหมายเลขพร้อมเพย์ของร้าน (เบอร์มือถือ หรือ เลขนิติบุคคล/เลขผู้เสียภาษี)
+// 🟢 ระบุหมายเลขพร้อมเพย์ของร้าน
 const SHOP_PROMPTPAY_ID = '0922657200'; 
-
-// 🟢 กำหนดวันที่เริ่มเข้มงวดการตรวจคิว (จองตั้งแต่วันนี้เป็นต้นไปต้องผ่านสตาฟฟ์เฉพาะวันคอนเสิร์ต)
+// 🟢 กำหนดวันที่เริ่มเข้มงวดการตรวจคิว
 const ENFORCE_CHECK_DATE = '2026-07-10';
 
 interface BookingRecord {
@@ -42,14 +41,19 @@ export default function BookingPage() {
   const params = useParams();
   const shopSlug = (params?.shop_slug as string) || 'default-shop';
 
-  // 🟢 Modal States (เปลี่ยนจาก alert บราวเซอร์โบราณมาเป็น Pop-up หรูๆ)
+  // Modal States
   const [showModal, setShowModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  
+  const [showConcertModal, setShowConcertModal] = useState(false);
+  const [concertEvent, setConcertEvent] = useState<any>(null);
+
+  // 🟢 State สำหรับ List คอนเสิร์ตทั้งหมด
+  const [showConcertListModal, setShowConcertListModal] = useState(false);
+  const [upcomingConcerts, setUpcomingConcerts] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(false);
-  
-  // 🟢 ข้อมูลความสำเร็จเป็น Array รองรับหลายโต๊ะ
   const [successData, setSuccessData] = useState<BookingRecord[] | null>(null);
 
   const [isShopOpen, setIsShopOpen] = useState(true);
@@ -62,22 +66,20 @@ export default function BookingPage() {
   const [bookingDate, setBookingDate] = useState('');
   const [bookingTime, setBookingTime] = useState('19:00');
   const [guestsCount, setGuestsCount] = useState(4);
-  
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
   const [dayTables, setDayTables] = useState<Record<string, 'booked' | 'pending'>>({});
   
   const [currentEventPrice, setCurrentEventPrice] = useState(0);
+  const [eventsMap, setEventsMap] = useState<Record<string, any>>({});
 
   const formattedShopName = 'ร้าน เรๅ สาขาศรีนครินทร์';
   const minAllowedGuests = 4;
 
-  // ฟังก์ชัน Trigger สั่งเปิด Error Pop-up ครอบคลุมธีมร้าน
   const triggerError = (msg: string) => {
     setErrorMessage(msg);
     setShowErrorModal(true);
   };
 
-  // เช็กสถานะเปิด/ปิดร้าน
   useEffect(() => {
     let active = true;
     const checkShopStatus = async () => {
@@ -102,7 +104,49 @@ export default function BookingPage() {
     checkShopStatus();
   }, [shopSlug]);
 
-  // ดึงข้อมูลคิวจองรายวัน
+  // 🟢 ดึงข้อมูลคอนเสิร์ตทั้งหมดที่มีในอนาคตมาแสดงเป็น List และแมปปฏิทิน
+  useEffect(() => {
+    const fetchUpcomingConcerts = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const { data } = await supabase
+        .from('shop_events')
+        .select('*')
+        .eq('shop_id', shopSlug)
+        .gte('event_date', today)
+        .order('event_date', { ascending: true });
+      
+      if (data) {
+        // แยกเก็บเป็นลิสต์คอนเสิร์ต
+        setUpcomingConcerts(data.filter((e: any) => e.event_type === 'concert'));
+        
+        // แยกเก็บเป็น Map ไว้เช็กวันที่
+        const mapped = data.reduce((acc, curr: any) => ({
+          ...acc,
+          [curr.event_date]: curr
+        }), {} as Record<string, any>);
+        setEventsMap(mapped);
+      }
+    };
+    fetchUpcomingConcerts();
+  }, [shopSlug]);
+
+  // เช็ก event รายวันเมื่อลูกค้ากดเลือกวันที่
+  useEffect(() => {
+    if (!bookingDate) return;
+    
+    // ดึงข้อมูลจาก eventsMap แทนการยิงฐานข้อมูลใหม่
+    const eventData = eventsMap[bookingDate];
+    
+    if (eventData && eventData.event_type === 'concert') {
+      setConcertEvent(eventData);
+      setShowConcertModal(true); 
+      setCurrentEventPrice(eventData.price || 0);
+    } else {
+      setConcertEvent(null);
+      setCurrentEventPrice(0);
+    }
+  }, [bookingDate, eventsMap]);
+
   const fetchTodayBookings = useCallback(async (targetDate: string) => {
     if (!targetDate) return;
     try {
@@ -126,7 +170,6 @@ export default function BookingPage() {
     }
   }, [shopSlug]);
 
-  // Real-time Database
   useEffect(() => {
     if (!bookingDate) return;
     let active = true;
@@ -152,72 +195,44 @@ export default function BookingPage() {
               });
             }
           }
-          else if (payload.eventType === 'DELETE') {
-            fetchTodayBookings(bookingDate); 
-          }
         }
-      )
-      .subscribe();
+      ).subscribe();
 
-    return () => {
-      active = false;
-      supabase.removeChannel(realtimeChannel);
-    };
+    return () => { active = false; supabase.removeChannel(realtimeChannel); };
   }, [bookingDate, fetchTodayBookings, shopSlug]);
 
-  // ล้างค่าโต๊ะที่เลือกเมื่อเปลี่ยนวัน
   useEffect(() => {
     setSelectedTables([]);
     setGuestsCount(4);
   }, [bookingDate]);
 
-  // ฟังก์ชันส่งจองโต๊ะเข้าระบบ
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !phone.trim() || !bookingDate || selectedTables.length === 0) return;
 
-    if (!isShopOpen) {
-      triggerError('ขออภัยครับขณะนี้ระบบรับคิวจองออนไลน์ปิดชั่วคราวแล้วครับ');
-      return;
-    }
+    if (!isShopOpen) { triggerError('ขออภัยครับขณะนี้ระบบรับคิวจองออนไลน์ปิดชั่วคราวแล้วครับ'); return; }
 
-    // ตรวจสอบสถานะโต๊ะเรียลไทม์
     const isAnyTableUnavailable = selectedTables.some(t => dayTables[t] === 'booked' || dayTables[t] === 'pending');
     if (isAnyTableUnavailable) {
       triggerError('ขออภัยครับ มีบางโต๊ะที่คุณเลือกถูกจองไปแล้ว กรุณาเลือกใหม่อีกครั้งครับ');
-      fetchTodayBookings(bookingDate); 
-      setSelectedTables([]);
-      return;
+      fetchTodayBookings(bookingDate); setSelectedTables([]); return;
     }
 
-    // 🟢 เช็กเงื่อนไขขั้นต่ำ 4 คนตอนกดยื่นฟอร์มแทน ถ้าต่ำกว่าเกณฑ์จะเด้ง Pop-up เตือนความสวยงามขึ้นมาทันที
     if (guestsCount < minAllowedGuests) {
       triggerError(`ขออภัยครับ ข้อกำหนดของทางร้านจำเป็นต้องมีสมาชิกขั้นต่ำ ${minAllowedGuests} ท่านครับ`);
-      setGuestsCount(4);
-      return;
+      setGuestsCount(4); return;
     }
 
     setLoading(true);
     try {
-      const { data: eventData } = await supabase
-        .from('shop_events')
-        .select('event_type, price')
-        .eq('shop_id', shopSlug)
-        .eq('event_date', bookingDate)
-        .maybeSingle();
-
+      const eventData = eventsMap[bookingDate];
       const isConcertDay = eventData?.event_type === 'concert';
-      const eventPricePerTable = eventData?.price || 0; 
-      
+      const eventPricePerTable = eventData?.price || 0;
       setCurrentEventPrice(eventPricePerTable);
 
-      const statusToSet = (isConcertDay && bookingDate >= ENFORCE_CHECK_DATE) 
-        ? 'pending' 
-        : 'confirmed';
-
+      const statusToSet = (isConcertDay && bookingDate >= ENFORCE_CHECK_DATE) ? 'pending' : 'confirmed';
       const randomCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      // เติมรหัสห้อยท้ายแยกตามโต๊ะ เพื่อป้องกัน Error Unique Constraint 23505 ในฐานข้อมูล
       const newBookings = selectedTables.map(table => ({
         shop_id: shopSlug,
         booking_code: selectedTables.length > 1 ? `${randomCode}-${table}` : randomCode, 
@@ -230,18 +245,12 @@ export default function BookingPage() {
         status: statusToSet, 
       }));
 
-      // ยิงข้อมูลลง Supabase แบบ Batch
-      const { data, error } = await supabase
-        .from('restaurant_bookings')
-        .insert(newBookings)
-        .select();
+      const { data, error } = await supabase.from('restaurant_bookings').insert(newBookings).select();
 
       if (error) {
         if (error.code === '23505') { 
           triggerError('มีการซ้อนทับของคิวจอง กรุณาเลือกโต๊ะอื่นแทนนะครับ');
-          fetchTodayBookings(bookingDate); 
-          setSelectedTables([]);
-          return;
+          fetchTodayBookings(bookingDate); setSelectedTables([]); return;
         }
         throw error;
       }
@@ -265,56 +274,37 @@ export default function BookingPage() {
               status: statusToSet
             })
           });
-        } catch (lineErr) {
-          console.error('LINE notification webhook failed:', lineErr);
-        }
+        } catch (lineErr) { console.error('LINE notification failed:', lineErr); }
 
-        setShowModal(true); // เปิดใบเสร็จ Pop-up คอนเฟิร์มความสำเร็จ
+        setShowModal(true); 
       }
-
     } catch (err) {
-      console.error(err);
-      triggerError('ระบบเชื่อมโยงข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง');
-    } finally {
-      setLoading(false);
-    }
+      console.error(err); triggerError('ระบบเชื่อมโยงข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง');
+    } finally { setLoading(false); }
   };
 
-  // พรีเมียมคอมโพเนนต์ดีไซ็นตั๋ว PDF
   const handleDownloadPDF = () => {
     if (!successData || successData.length === 0) return;
     const bookingInfo = successData[0]; 
     const allTables = successData.map(b => b.table_number).join(', '); 
-
     const canvas = document.createElement('canvas');
     canvas.width = 450; canvas.height = 720; 
     const ctx = canvas.getContext('2d'); if (!ctx) return;
     const ThaiFont = "'Prompt', 'Thonburi', 'Arial', sans-serif";
-
     ctx.fillStyle = '#111116'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.strokeStyle = '#E5B842'; ctx.lineWidth = 4; ctx.strokeRect(15, 15, canvas.width - 30, canvas.height - 30);
-
     ctx.textAlign = 'center'; ctx.fillStyle = '#FFFFFF'; ctx.font = `bold 24px ${ThaiFont}`; 
     ctx.fillText(formattedShopName, 225, 120);
-    
     ctx.fillStyle = '#FF1F88'; ctx.font = `bold 13px ${ThaiFont}`; 
     ctx.fillText(bookingInfo.status === 'pending' ? '★ ใบยืนยันคิวรอชำระเงิน ★' : '★ ใบยืนยันการจองโต๊ะอาหาร ★', 225, 150);
-
     ctx.strokeStyle = '#2D2235'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
     ctx.beginPath(); ctx.moveTo(35, 180); ctx.lineTo(415, 180); ctx.stroke(); ctx.setLineDash([]);
-
     ctx.fillStyle = '#9E9EAF'; ctx.font = `12px ${ThaiFont}`; ctx.fillText('BOOKING CODE', 225, 215);
-    
-    const cleanDisplayCode = bookingInfo.booking_code.split('-').length > 2
-      ? bookingInfo.booking_code.split('-').slice(0, 2).join('-')
-      : bookingInfo.booking_code;
-
+    const cleanDisplayCode = bookingInfo.booking_code.split('-').length > 2 ? bookingInfo.booking_code.split('-').slice(0, 2).join('-') : bookingInfo.booking_code;
     ctx.fillStyle = '#E5B842'; ctx.font = `bold 38px ${ThaiFont}`; ctx.fillText(cleanDisplayCode, 225, 260);
     ctx.strokeStyle = '#2D2235'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(40, 290); ctx.lineTo(410, 290); ctx.stroke();
-
     ctx.textAlign = 'left'; ctx.font = `15px ${ThaiFont}`;
     let currentY = 335; const spacing = 36; const leftCol = 55; const rightCol = 185;
-
     const items = [
       { label: 'ชื่อผู้เช็กจอง :', value: bookingInfo.customer_name },
       { label: 'เบอร์ติดต่อ :', value: bookingInfo.phone },
@@ -322,22 +312,17 @@ export default function BookingPage() {
       { label: 'เวลาล็อกโต๊ะ :', value: `${bookingInfo.booking_time.slice(0, 5)} น.` }, 
       { label: 'จำนวนสมาชิก :', value: `${bookingInfo.guests_count} ท่าน (ขั้นต่ำ 4 ท่าน)` }
     ];
-
     items.forEach(item => {
       ctx.fillStyle = '#9E9EAF'; ctx.fillText(item.label, leftCol, currentY);
       ctx.fillStyle = '#FFFFFF'; ctx.fillText(item.value, rightCol, currentY);
       currentY += spacing;
     });
-
     ctx.strokeStyle = '#2D2235'; ctx.beginPath(); ctx.moveTo(40, 520); ctx.lineTo(410, 520); ctx.stroke();
-    
     ctx.textAlign = 'center'; ctx.fillStyle = '#FF1F88'; ctx.font = `bold 12px ${ThaiFont}`;
     ctx.fillText('ASSIGNED STATION TABLE', 225, 555);
-    
     const tableFontSize = allTables.length > 5 ? 40 : 64;
     ctx.fillStyle = '#E5B842'; ctx.font = `bold ${tableFontSize}px ${ThaiFont}`;
     ctx.fillText(allTables, 225, 630);
-
     const doc = new PDFInstance({ orientation: 'p', unit: 'mm', format: [85, 136] });
     const ticketImg = canvas.toDataURL('image/jpeg', 1.0);
     doc.addImage(ticketImg, 'JPEG', 0, 0, 85, 136);
@@ -364,8 +349,7 @@ export default function BookingPage() {
         <div className="absolute w-[500px] h-[500px] rounded-full blur-[140px] -bottom-32 -left-24" style={{ backgroundColor: `${THEME.purple}0D` }} />
       </div>
 
-      {/* บล็อกฟอร์มจองหลักหน้าร้าน */}
-      <div className="w-full max-w-xl z-10 flex justify-center px-2 sm:px-0">
+      <div className="w-full max-w-xl z-10 flex justify-center px-2 sm:px-0 mt-8 mb-8">
         <div className="p-5 sm:p-8 border space-y-6 shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-xl rounded-3xl w-full max-w-md sm:max-w-xl" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
           
           <div className="text-center space-y-2">
@@ -393,12 +377,33 @@ export default function BookingPage() {
           ) : (
             <form onSubmit={handleBooking} className="space-y-5 text-base w-full">
               
+              {/* ปุ่มกดดูลิสต์คอนเสิร์ตทั้งหมด */}
+              {upcomingConcerts.length > 0 && (
+                <button 
+                  type="button" 
+                  onClick={() => setShowConcertListModal(true)}
+                  className="w-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-xl p-3 flex items-center justify-between hover:bg-pink-500/30 transition-all group"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="bg-pink-500 text-white p-1.5 rounded-lg group-hover:scale-110 transition-transform"><Music size={16} /></div>
+                    <span className="font-bold text-sm text-pink-100 tracking-wide">ดูตารางปาร์ตี้คอนเสิร์ตทั้งหมด 🎉</span>
+                  </div>
+                  <ArrowRight size={16} className="text-pink-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full bg-black/30 p-3 rounded-2xl border" style={{ borderColor: `${THEME.gold}20` }}>
                 <div className="space-y-2 w-full min-w-0">
                   <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 font-mono" style={{ color: THEME.gold }}>
                     <Calendar size={15} /> 1. เลือกวันที่ต้องการจอง
                   </label>
-                  <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
+                  <div 
+                    className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-300 focus-within:border-amber-400" 
+                    style={{ 
+                      borderColor: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? THEME.pink : THEME.border,
+                      boxShadow: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? `0 0 15px ${THEME.pink}40` : 'none'
+                    }}
+                  >
                     <input 
                       type="date" 
                       required 
@@ -408,6 +413,21 @@ export default function BookingPage() {
                       className="w-full h-full appearance-none bg-transparent px-4 text-white outline-none text-base color-scheme-dark block min-w-0 box-border iOS-date-input" 
                     />
                   </div>
+                  {/* แจ้งเตือนวันคอนเสิร์ตใต้ปฏิทินแบบเรียลไทม์ */}
+                  <AnimatePresence>
+                    {bookingDate && eventsMap[bookingDate]?.event_type === 'concert' && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10, height: 0 }} 
+                        animate={{ opacity: 1, y: 0, height: 'auto' }} 
+                        exit={{ opacity: 0, y: -10, height: 0 }}
+                        className="text-xs font-bold flex items-center gap-1.5 px-2 pt-1"
+                        style={{ color: THEME.pink }}
+                      >
+                        <Music size={14} className="animate-pulse" /> 
+                        วันนี้มีอีเวนต์พิเศษ: {eventsMap[bookingDate].title}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 <div className="space-y-2 w-full">
@@ -451,6 +471,15 @@ export default function BookingPage() {
                     </div>
                   )}
                 </div>
+
+                {/* 🟢 คำอธิบายสีสถานะโต๊ะ (Legend) */}
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 mt-3 text-[10px] sm:text-xs font-medium text-slate-300 w-full">
+                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500 border border-emerald-700"></span> ว่าง</div>
+                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-sky-400 border border-white animate-pulse"></span> โต๊ะที่เลือก</div>
+                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500 border border-red-700"></span> จองแล้ว</div>
+                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500 border border-amber-600 animate-pulse"></span> รอชำระเงิน</div>
+                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-slate-800 border border-slate-700 opacity-60"></span> ปิดใช้งาน</div>
+                </div>
               </div>
 
               <div className="space-y-4 pt-1 w-full">
@@ -487,7 +516,6 @@ export default function BookingPage() {
                     />
                   </div>
 
-                  {/* สเต็ปเปอร์บวก-ลบจำนวนคน ล็อกขั้นต่ำ 4 ปล่อยลบว่างกรอกใหม่ได้อิสระทางสถาปัตยกรรม */}
                   <div className="space-y-2 w-full">
                     <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
                       <Users size={16} style={{ color: THEME.pink }} /> จำนวนสมาชิก <span className="text-xs ml-1" style={{ color: THEME.gold }}>(ขั้นต่ำ 4 คน)</span>
@@ -547,7 +575,126 @@ export default function BookingPage() {
         </div>
       </div>
 
-      {/* ================= 🟢 POP-UP ERROR MODAL (สวยงาม คมชัด แทน alert เดิม) ================= */}
+      {/* ================= 🟢 POP-UP CONCERT LIST (ตารางคอนเสิร์ต) ================= */}
+      <AnimatePresence>
+        {showConcertListModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowConcertListModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-md h-[80vh] flex flex-col relative overflow-hidden rounded-3xl z-10 shadow-2xl bg-[#16161E] border border-[#2D2235]"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-white/5 bg-black/20">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2"><Music className="text-pink-500"/> ตารางคอนเสิร์ต / ปาร์ตี้</h2>
+                <button onClick={() => setShowConcertListModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10"><X size={20}/></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {upcomingConcerts.length > 0 ? upcomingConcerts.map((concert) => (
+                  <div key={concert.id} className="bg-black/40 border border-slate-800 rounded-2xl overflow-hidden flex flex-col group hover:border-pink-500/50 transition-colors">
+                    {concert.image_url && (
+                      <div className="w-full h-40 bg-slate-900 relative">
+                        <img src={concert.image_url} alt={concert.title} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="p-4 space-y-2">
+                      <div className="flex justify-between items-start">
+                        <h3 className="font-bold text-white text-lg leading-tight">{concert.title}</h3>
+                        <span className="text-xs bg-pink-500/20 text-pink-400 px-2 py-1 rounded-md font-bold whitespace-nowrap ml-2">{concert.event_date}</span>
+                      </div>
+                      <p className="text-amber-400 font-bold text-sm">บัตรเหมาต่อโต๊ะ: {concert.price.toLocaleString()} THB</p>
+                      
+                      {concert.perks_note && (
+                        <div className="pt-2 mt-2 border-t border-white/5">
+                          <p className="text-[11px] text-slate-400 font-bold mb-1">หมายเหตุและเงื่อนไข:</p>
+                          <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{concert.perks_note}</p>
+                        </div>
+                      )}
+
+                      <button 
+                        onClick={() => {
+                          setBookingDate(concert.event_date);
+                          setShowConcertListModal(false);
+                        }}
+                        className="w-full mt-3 py-2.5 bg-white/5 hover:bg-pink-500 hover:text-white text-slate-300 rounded-xl text-sm font-bold transition-all border border-slate-700 hover:border-pink-500"
+                      >
+                        เลือกคอนเสิร์ตนี้
+                      </button>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2">
+                    <Music size={32} className="opacity-20" />
+                    <p>ยังไม่มีคิวงานคอนเสิร์ตในขณะนี้</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ================= 🟢 POP-UP CONCERT (FULL IMAGE BACKGROUND) ================= */}
+      <AnimatePresence>
+        {showConcertModal && concertEvent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => { setShowConcertModal(false); setBookingDate(''); }} 
+              className="fixed inset-0 bg-black/85 backdrop-blur-sm" 
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-sm min-h-[500px] relative overflow-hidden rounded-[2rem] z-10 flex flex-col justify-end shadow-2xl"
+              style={{ backgroundColor: THEME.card }}
+            >
+              <button 
+                onClick={() => { setShowConcertModal(false); setBookingDate(''); }} 
+                className="absolute right-4 top-4 p-2 rounded-full bg-black/40 backdrop-blur-md text-white hover:bg-black/60 z-20 transition-colors"
+              >
+                <X size={18} />
+              </button>
+              
+              {concertEvent.image_url && (
+                <img src={concertEvent.image_url} alt="Concert Poster" className="absolute inset-0 w-full h-full object-cover z-0" />
+              )}
+              
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0E] via-[#0A0A0E]/80 to-transparent z-0 pointer-events-none" />
+
+              <div className="relative z-10 p-6 flex flex-col items-center text-center w-full mt-auto">
+                 <h2 className="text-sm font-black text-white bg-black/40 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full mb-2">
+                   {concertEvent.event_date}
+                 </h2>
+                 <h3 className="text-3xl font-black text-white mb-4 drop-shadow-lg">
+                   {concertEvent.title || 'Concert Event'}
+                 </h3>
+                 
+                 <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-3xl p-5 w-full text-sm font-bold shadow-xl whitespace-pre-line leading-relaxed">
+                    {concertEvent.perks_note || `โปรโมชั่นสำหรับวันนี้จองขั้นต่ำ 2 โต๊ะ\nเตรียมพร้อมมาสนุกสุดเหวี่ยง\nไปพร้อมกับสาวๆ ทั้ง 5 คนได้เลย\nราคาต่อโต๊ะ ${concertEvent.price} ฿`}
+                 </div>
+                 
+                 <p className="text-xs text-amber-400 mt-4 font-bold animate-pulse drop-shadow-md">คลิกด้านล่างเพื่อทำการจอง</p>
+                 
+                 <button 
+                  onClick={() => setShowConcertModal(false)} 
+                  className="mt-3 w-[80%] py-3.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black rounded-full shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-transform active:scale-95"
+                 >
+                   จองโต๊ะ
+                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ================= 🟢 POP-UP ERROR MODAL ================= */}
       <AnimatePresence>
         {showErrorModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

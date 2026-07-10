@@ -9,12 +9,11 @@ interface TableData {
   status: string;
 }
 
-// 🟢 [ปรับปรุงครั้งสุดท้าย] ทำให้ Props ยืดหยุ่น รองรับทั้งการส่งแบบเดี่ยว (Monitor) และแบบกลุ่ม (Booking/Dashboard)
 interface FloorPlanProps {
   selectedTables?: string[];
   setSelectedTables?: React.Dispatch<React.SetStateAction<string[]>>;
-  selectedTable?: string | null;              // 🌟 รองรับหน้าแอดมินเดิม
-  onTableClick?: (tableId: string) => void;   // 🌟 รองรับ Event จิ้มล็อกโต๊ะทันทีของหน้า Monitor
+  selectedTable?: string | null;
+  onTableClick?: (tableId: string) => void;
   dayTables?: Record<string, 'booked' | 'pending'>; 
 }
 
@@ -106,43 +105,20 @@ export default function FloorPlan({
 
   const getTableStyle = (tableId: string) => {
     const dayStatus = dayTables[tableId];
-
-    if (dayStatus === 'booked') {
-      return 'fill-red-500/90 stroke-red-700 cursor-not-allowed';
-    }
-    
-    if (dayStatus === 'pending') {
-      return 'fill-amber-500 stroke-amber-600 animate-pulse cursor-not-allowed';
-    }
-
-    // 🌟 ไฮไลท์สีฟ้า: เช็กโครงสร้างทั้งแบบ Array และแบบเดี่ยวร่วมกัน
-    if (selectedTables.includes(tableId) || selectedTable === tableId) {
-      return 'fill-sky-400 stroke-white stroke-[2px] animate-pulse cursor-pointer';
-    }
-
+    if (dayStatus === 'booked') return 'fill-red-500/90 stroke-red-700 cursor-not-allowed';
+    if (dayStatus === 'pending') return 'fill-amber-500 stroke-amber-600 animate-pulse cursor-not-allowed';
+    if (selectedTables.includes(tableId) || selectedTable === tableId) return 'fill-sky-400 stroke-white stroke-[2px] animate-pulse cursor-pointer';
     const current = tables[tableId];
-    if (current && current.status === 'broken') {
-      return 'fill-slate-800 stroke-slate-700 cursor-not-allowed opacity-40';
-    }
-
+    if (current && current.status === 'broken') return 'fill-slate-800 stroke-slate-700 cursor-not-allowed opacity-40';
     return 'fill-emerald-500 hover:fill-emerald-400 stroke-emerald-700 cursor-pointer transition-all';
   }
 
   const handleTableClick = (tableId: string) => {
     if (dayTables[tableId] === 'booked' || dayTables[tableId] === 'pending' || tables[tableId]?.status === 'broken') return;
-    
-    // 🌟 ถ้าหน้า Monitor ส่งฟังก์ชัน callback มา ให้รันตัวนี้แล้วจบงานทันที
-    if (onTableClick) {
-      onTableClick(tableId);
-      return;
-    }
-
-    // ระบบจัดกลุ่ม Array สำหรับหน้า Booking ของลูกค้า
+    if (onTableClick) { onTableClick(tableId); return; }
     if (setSelectedTables) {
       setSelectedTables((prev) => {
-        if (prev.includes(tableId)) {
-          return prev.filter((id) => id !== tableId);
-        }
+        if (prev.includes(tableId)) return prev.filter((id) => id !== tableId);
         return [...prev, tableId];
       });
     }
@@ -158,24 +134,68 @@ export default function FloorPlan({
               <button type="button" onClick={() => zoomOut()} className="w-7 h-7 flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-sm border border-slate-700/40 transition-all active:scale-90">-</button>
               <button type="button" onClick={() => resetTransform()} className="text-[8px] py-1 bg-slate-900 hover:bg-slate-800 text-slate-400 rounded-md font-mono border border-slate-700/40 transition-all active:scale-90">RESET</button>
             </div>
-            <div className="absolute top-3 left-3 z-30 bg-black/50 px-2 py-0.5 rounded-full border border-slate-800/80 pointer-events-none">
-              <p className="text-[9px] font-sans text-slate-400">💡 จีบนิ้วเพื่อซูม / ลากเพื่อเลื่อนดูโต๊ะ</p>
-            </div>
             <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full !h-full flex justify-center items-center">
               <svg viewBox="0 0 393 852" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-auto h-full max-h-full cursor-grab active:cursor-grabbing transition-shadow mx-auto">
                 <g clipPath="url(#clip0_2002_2)">
                   <rect width="393" height="852" fill="#020617"/>
-                  <line x1="2" y1="197.5" x2="116" y2="197.5" stroke="#334155"/><line x1="108.5" y1="197" x2="108.5" y2="181" stroke="#334155"/><line x1="108" y1="180.5" x2="285" y2="180.5" stroke="#334155"/><line x1="285" y1="202.012" x2="285" y2="181.988" stroke="#334155"/><line x1="276.5" y1="202.012" x2="276.5" y2="181.988" stroke="#334155"/><line x1="116.5" y1="181" x2="116.5" y2="268" stroke="#334155"/><line x1="276" y1="200.5" x2="285" y2="200.5" stroke="#334155"/><line x1="286" y1="201.5" x2="357" y2="201.5" stroke="#334155"/><line x1="357.5" y1="201" x2="357.5" y2="294" stroke="#334155"/><line x1="357.01" y1="292.75" x2="324.998" y2="292.75" stroke="#334155"/><line x1="325.392" y1="292.31" x2="295.392" y2="330.31" stroke="#334155"/><line x1="295.5" y1="331" x2="295.5" y2="390" stroke="#334155"/><line x1="295" y1="389.5" x2="307" y2="389.5" stroke="#334155"/><line x1="324" y1="389.5" x2="378" y="389.5" stroke="#334155"/><line x1="324.5" y1="389" x2="324.5" y2="378" stroke="#334155"/><line x1="31.5" y1="197" x2="31.5" y2="191" stroke="#334155"/><line x1="40.5" y1="197" x2="40.5" y2="191" stroke="#334155"/><line x1="31" y1="190.5" x2="41" y2="190.5" stroke="#334155"/><line x1="2.5" y1="197" x2="2.5" y2="543" stroke="#334155"/>
+                  
+                  {/* --- โครงสร้างผนังร้าน + คอกดีเจ (ของแท้ดั้งเดิม ครอบด้วย fill="none" เพื่อกันเส้นดำทะลุ) --- */}
+                  <g stroke="#334155" strokeWidth="1" fill="none">
+                    <line x1="2" y1="197.5" x2="116" y2="197.5" />
+                    <line x1="108.5" y1="197" x2="108.5" y2="181" />
+                    <line x1="108" y1="180.5" x2="285" y2="180.5" />
+                    <line x1="285" y1="202.012" x2="285" y2="181.988" />
+                    <line x1="276.5" y1="202.012" x2="276.5" y2="181.988" />
+                    <line x1="116.5" y1="181" x2="116.5" y2="268" />
+                    <line x1="276" y1="200.5" x2="285" y2="200.5" />
+                    <line x1="286" y1="201.5" x2="357" y2="201.5" />
+                    <line x1="357.5" y1="201" x2="357.5" y2="294" />
+                    <line x1="357.01" y1="292.75" x2="324.998" y2="292.75" />
+                    <line x1="325.392" y1="292.31" x2="295.392" y2="330.31" />
+                    <line x1="295.5" y1="331" x2="295.5" y2="390" />
+                    <line x1="295" y1="389.5" x2="307" y2="389.5" />
+                    <line x1="324" y1="389.5" x2="378" y2="389.5" />
+                    <line x1="324.5" y1="389" x2="324.5" y2="378" />
+                    <line x1="31.5" y1="197" x2="31.5" y2="191" />
+                    <line x1="40.5" y1="197" x2="40.5" y2="191" />
+                    <line x1="31" y1="190.5" x2="41" y2="190.5" />
+                    <line x1="2.5" y1="197" x2="2.5" y2="543" />
+                    
+                    <line x1="2.99777" y1="543.5" x2="117" y2="542.99" />
+                    <line x1="116.5" y1="543" x2="116.5" y2="488" />
+                    <line x1="116" y1="487.5" x2="145" y2="487.5" />
+                    <line x1="145.5" y1="487" x2="145.5" y2="510" />
+                    <line x1="144.997" y1="509.745" x2="284.999" y2="509.502" />
+                    
+                    {/* คอกดีเจ (กลับมาแล้วครับ!) */}
+                    <path d="M225.5 510V443.177" />
+                    <path d="M173 509.5C171.586 459.147 184.033 445.488 225.612 443.684" />
+                    
+                    <line x1="284.5" y1="509" x2="284.5" y2="482" />
+                    <line x1="285" y1="482.5" x2="378" y2="482.5" />
+                    <line x1="376.753" y1="482.001" x2="376.753" y2="388.997" />
+                  </g>
+
+                  {/* โต๊ะอาหารทั้งหมด */}
                   {RESTAURANT_TABLES.map((t) => (
                     <g key={t.id}>
                       <circle cx={t.cx} cy={t.cy} r="8.5" className={getTableStyle(t.id)} onClick={() => handleTableClick(t.id)} />
                       <text x={t.cx} y={t.cy + 3} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif" className="pointer-events-none select-none">{t.label}</text>
                     </g>
                   ))}
-                  <rect x="134.5" y="202.5" width="123" height="85" stroke="#475569" fill="#1e293b"/><text x="196" y="252" fill="#e2e8f0" fontSize="24" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">เวที</text>
-                  <line x1="2.99777" y1="543.5" x2="117" y2="542.99" stroke="#334155"/><line x1="116.5" y1="543" x2="116.5" y2="488" stroke="#334155"/><line x1="116" y1="487.5" x2="145" y2="487.5" stroke="#334155"/><line x1="145.5" y1="487" x2="145.5" y2="510" stroke="#334155"/><line x1="144.997" y1="509.745" x2="284.999" y2="509.502" stroke="#334155"/><path d="M225.5 510V443.177" stroke="#334155"/><path d="M173 509.5C171.586 459.147 184.033 445.488 225.612 443.684" stroke="#334155"/><line x1="284.5" y1="509" x2="284.5" y2="482" stroke="#334155"/><line x1="285" y1="482.5" x2="378" y2="482.5" stroke="#334155"/><line x1="376.753" y1="482.001" x2="376.753" y2="388.997" stroke="#334155"/>
-                  <text x="196" y="482" fill="#94a3b8" fontSize="14" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">DJ</text><text x="330" y="370" fill="#e2e8f0" fontSize="14" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">ทางเข้า</text>
-                  <rect x="31.5171" y="497.688" width="7.89269" height="14.5268" stroke="#f472b6" strokeWidth="0.4" fill="#f472b6"/><rect x="29.6585" y="495" width="8.29269" height="3.31707" fill="#f472b6"/><rect x="31.3171" y="511.585" width="8.29269" height="14.9268" fill="#f472b6"/><rect x="29.6585" y="525.683" width="8.29269" height="3.31707" fill="#f472b6"/><rect x="28" y="496.659" width="4.14634" height="30.6829" fill="#f472b6"/><rect x="68.2927" y="526.512" width="8.29269" height="14.9268" transform="rotate(180 68.2927 526.512)" fill="#f472b6"/><rect x="69.9512" y="529" width="8.29269" height="3.31707" transform="rotate(180 69.9512 529)" fill="#f472b6"/><rect x="68.2927" y="512.415" width="8.29269" height="14.9268" transform="rotate(180 68.2927 512.415)" fill="#f472b6"/><rect x="69.9512" y="498.317" width="8.29269" height="3.31707" transform="rotate(180 69.9512 498.317)" fill="#f472b6"/><rect x="71.6098" y="527.341" width="4.14634" height="30.6829" transform="rotate(180 71.6098 527.341)" fill="#f472b6"/><rect x="41.4268" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 41.4268 537.667)" fill="#f472b6"/><rect x="40" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 40 539.4)" fill="#f472b6"/><rect x="49.5122" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 49.5122 537.667)" fill="#f472b6"/><rect x="57.5976" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 57.5976 539.4)" fill="#f472b6"/><rect x="40.9512" y="541.133" width="4.33333" height="17.5976" transform="rotate(-90 40.9512 541.133)" fill="#f472b6"/><rect x="75.5171" y="497.688" width="7.89269" height="14.5268" stroke="#f472b6" strokeWidth="0.4" fill="#f472b6"/><rect x="73.6585" y="495" width="8.29269" height="3.31707" fill="#f472b6"/><rect x="75.3171" y="511.585" width="8.29269" height="14.9268" fill="#f472b6"/><rect x="73.6585" y="525.683" width="8.29269" height="3.31707" fill="#f472b6"/><rect x="72" y="496.659" width="4.14634" height="30.6829" fill="#f472b6"/><rect x="112.293" y="526.512" width="8.29269" height="14.9268" transform="rotate(180 112.293 526.512)" fill="#f472b6"/><rect x="113.951" y="529" width="8.29269" height="3.31707" transform="rotate(180 113.951 529)" fill="#f472b6"/><rect x="112.293" y="512.415" width="8.29269" height="14.9268" transform="rotate(180 112.293 512.415)" fill="#f472b6"/><rect x="113.951" y="498.317" width="8.29269" height="3.31707" transform="rotate(180 113.951 498.317)" fill="#f472b6"/><rect x="115.61" y="527.341" width="4.14634" height="30.6829" transform="rotate(180 115.61 527.341)" fill="#f472b6"/><rect x="85.4268" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 85.4268 537.667)" fill="#f472b6"/><rect x="84" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 84 539.4)" fill="#f472b6"/><rect x="93.5122" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 93.5122 537.667)" fill="#f472b6"/><rect x="101.598" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 101.598 539.4)" fill="#f472b6"/><rect x="84.9512" y="541.133" width="4.33333" height="17.5976" transform="rotate(-90 84.9512 541.133)" fill="#f472b6"/><rect x="135" y="290" width="19" height="7" fill="#141414"/><rect x="155" y="290" width="19" height="7" fill="#141414"/><rect x="219" y="290" width="19" height="7" fill="#141414"/><rect x="241" y="290" width="19" height="7" fill="#141414"/>
+
+                  {/* โซนเวที */}
+                  <rect x="134.5" y="202.5" width="123" height="85" stroke="#475569" fill="#1e293b"/>
+                  <text x="196" y="252" fill="#e2e8f0" fontSize="24" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">เวที</text>
+                  
+                  {/* ข้อความประกอบอื่นๆ */}
+                  <text x="196" y="482" fill="#94a3b8" fontSize="14" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">DJ</text>
+                  <text x="330" y="370" fill="#e2e8f0" fontSize="14" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">ทางเข้า</text>
+                  
+                  {/* กล่องสีชมพูประดับ (ของเดิมจาก Figma) */}
+                  <rect x="31.5171" y="497.688" width="7.89269" height="14.5268" stroke="#f472b6" strokeWidth="0.4" fill="#f472b6"/><rect x="29.6585" y="495" width="8.29269" height="3.31707" fill="#f472b6"/><rect x="31.3171" y="511.585" width="8.29269" height="14.9268" fill="#f472b6"/><rect x="29.6585" y="525.683" width="8.29269" height="3.31707" fill="#f472b6"/><rect x="28" y="496.659" width="4.14634" height="30.6829" fill="#f472b6"/><rect x="68.2927" y="526.512" width="8.29269" height="14.9268" transform="rotate(180 68.2927 526.512)" fill="#f472b6"/><rect x="69.9512" y="529" width="8.29269" height="3.31707" transform="rotate(180 69.9512 529)" fill="#f472b6"/><rect x="68.2927" y="512.415" width="8.29269" height="14.9268" transform="rotate(180 68.2927 512.415)" fill="#f472b6"/><rect x="69.9512" y="498.317" width="8.29269" height="3.31707" transform="rotate(180 69.9512 498.317)" fill="#f472b6"/><rect x="71.6098" y="527.341" width="4.14634" height="30.6829" transform="rotate(180 71.6098 527.341)" fill="#f472b6"/><rect x="41.4268" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 41.4268 537.667)" fill="#f472b6"/><rect x="40" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 40 539.4)" fill="#f472b6"/><rect x="49.5122" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 49.5122 537.667)" fill="#f472b6"/><rect x="57.5976" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 57.5976 539.4)" fill="#f472b6"/><rect x="40.9512" y="541.133" width="4.33333" height="17.5976" transform="rotate(-90 40.9512 541.133)" fill="#f472b6"/><rect x="75.5171" y="497.688" width="7.89269" height="14.5268" stroke="#f472b6" strokeWidth="0.4" fill="#f472b6"/><rect x="73.6585" y="495" width="8.29269" height="3.31707" fill="#f472b6"/><rect x="75.3171" y="511.585" width="8.29269" height="14.9268" fill="#f472b6"/><rect x="73.6585" y="525.683" width="8.29269" height="3.31707" fill="#f472b6"/><rect x="72" y="496.659" width="4.14634" height="30.6829" fill="#f472b6"/><rect x="112.293" y="526.512" width="8.29269" height="14.9268" transform="rotate(180 112.293 526.512)" fill="#f472b6"/><rect x="113.951" y="529" width="8.29269" height="3.31707" transform="rotate(180 113.951 529)" fill="#f472b6"/><rect x="112.293" y="512.415" width="8.29269" height="14.9268" transform="rotate(180 112.293 512.415)" fill="#f472b6"/><rect x="113.951" y="498.317" width="8.29269" height="3.31707" transform="rotate(180 113.951 498.317)" fill="#f472b6"/><rect x="115.61" y="527.341" width="4.14634" height="30.6829" transform="rotate(180 115.61 527.341)" fill="#f472b6"/><rect x="85.4268" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 85.4268 537.667)" fill="#f472b6"/><rect x="84" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 84 539.4)" fill="#f472b6"/><rect x="93.5122" y="537.667" width="8.66667" height="8.56097" transform="rotate(-90 93.5122 537.667)" fill="#f472b6"/><rect x="101.598" y="539.4" width="8.66667" height="1.90244" transform="rotate(-90 101.598 539.4)" fill="#f472b6"/><rect x="84.9512" y="541.133" width="4.33333" height="17.5976" transform="rotate(-90 84.9512 541.133)" fill="#f472b6"/>
+                  <rect x="135" y="290" width="19" height="7" fill="#141414"/><rect x="155" y="290" width="19" height="7" fill="#141414"/><rect x="219" y="290" width="19" height="7" fill="#141414"/><rect x="241" y="290" width="19" height="7" fill="#141414"/>
+
                 </g>
                 <defs><clipPath id="clip0_2002_2"><rect width="393" height="852" fill="white"/></clipPath></defs>
               </svg>

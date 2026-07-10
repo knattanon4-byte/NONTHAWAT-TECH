@@ -126,7 +126,8 @@ export default function MonitorPage() {
 
   // Dashboard Main States
   const [bookings, setBookings] = useState<any[]>([]);
-  const [eventsMap, setEventsMap] = useState<Record<string, { title: string; price: number }>>({});
+  // 🟢 เก็บข้อมูล Event ทั้งก้อนเลย จะได้ดึงมาโชว์ในฟอร์มได้
+  const [eventsMap, setEventsMap] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string>('—');
@@ -240,20 +241,41 @@ export default function MonitorPage() {
     try {
       const { data } = await supabase
         .from('shop_events')
-        .select('event_date, title, price')
+        .select('*')
         .eq('shop_id', shopSlug);
       
       if (data) {
         const mapped = data.reduce((acc, curr: any) => ({
           ...acc,
-          [curr.event_date]: { title: curr.title, price: curr.price || 0 }
-        }), {} as Record<string, { title: string; price: number }>);
+          [curr.event_date]: curr
+        }), {} as Record<string, any>);
         setEventsMap(mapped);
       }
     } catch (err) {
       console.error('Failed to load shop events mapping:', err);
     }
   }, [shopSlug]);
+
+  // 🟢 ดึงข้อมูลมาโชว์ในฟอร์มทันทีเมื่อคลิกเลือกวันที่บนปฏิทิน
+  useEffect(() => {
+    if (eventDate && eventsMap[eventDate]) {
+      const ev = eventsMap[eventDate];
+      setEventType(ev.event_type || 'normal');
+      setEventTitle(ev.title || '');
+      setEventPrice(ev.price || 0);
+      setPerksNote(ev.perks_note || '');
+      setImagePreview(ev.image_url || null);
+      setImageFile(null); // เคลียร์รูปใหม่ที่รออัปโหลด
+    } else {
+      // ถ้าวันนั้นยังไม่มีงาน ให้ล้างฟอร์ม
+      setEventType('normal');
+      setEventTitle('');
+      setEventPrice(5000);
+      setPerksNote('');
+      setImagePreview(null);
+      setImageFile(null);
+    }
+  }, [eventDate, eventsMap]);
 
   useEffect(() => {
     if (!session) return; 
@@ -452,7 +474,7 @@ export default function MonitorPage() {
     setEventStatusMsg(null);
 
     try {
-      let uploadedImageUrl = '';
+      let uploadedImageUrl = imagePreview || '';
 
       if (imageFile && eventType === 'concert') {
         const fileExt = imageFile.name.split('.').pop();
@@ -491,16 +513,42 @@ export default function MonitorPage() {
       setEventStatusMsg({ type: 'success', text: `🎉 ตั้งค่าโหมด ${eventType === 'concert' ? 'วันคอนเสิร์ต' : 'วันปกติ'} เรียบร้อยแล้ว` });
       await loadEventsData(); 
 
-      if (eventType === 'concert') {
-        setEventTitle('');
-        setPerksNote('');
-        setImageFile(null);
-        setImagePreview(null);
-      }
     } catch (err: any) {
       console.error(err);
       setEventStatusMsg({ type: 'error', text: err.message || 'ระบบบันทึกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' });
     } finally { 
+      setEventLoading(false);
+    }
+  };
+
+  // 🟢 ฟังก์ชันสำหรับยกเลิกคอนเสิร์ต
+  const handleCancelConcert = async () => {
+    if (!eventDate) {
+      setEventStatusMsg({ type: 'error', text: 'กรุณาเลือกวันที่ต้องการยกเลิกบนปฏิทินก่อนครับ' });
+      return;
+    }
+
+    const isConfirm = window.confirm(`ยืนยันการลบ/ยกเลิกงานวันที่ ${eventDate} ใช่หรือไม่?`);
+    if (!isConfirm) return;
+
+    setEventLoading(true);
+    setEventStatusMsg(null);
+
+    try {
+      const { error } = await supabase
+        .from('shop_events')
+        .delete()
+        .eq('shop_id', shopSlug)
+        .eq('event_date', eventDate);
+
+      if (error) throw error;
+
+      setEventStatusMsg({ type: 'success', text: `🗑️ เคลียร์ข้อมูลงานวันที่ ${eventDate} เรียบร้อยแล้ว` });
+      await loadEventsData(); // รีเฟรชข้อมูลในปฏิทินให้เป็นวันว่างๆ ทันที
+    } catch (err: any) {
+      console.error(err);
+      setEventStatusMsg({ type: 'error', text: err.message || 'ระบบยกเลิกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' });
+    } finally {
       setEventLoading(false);
     }
   };
@@ -901,7 +949,7 @@ export default function MonitorPage() {
                           {isToday ? `🔥 รายการวันนี้ (${dateKey})` : `⏳ บันทึกย้อนหลัง (${dateKey})`}
                         </h2>
                         
-                        {dayEvent && (
+                        {dayEvent && dayEvent.event_type === 'concert' && (
                           <span 
                             className="text-[11px] px-2.5 py-0.5 rounded-md font-bold border font-sans animate-pulse"
                             style={{ backgroundColor: `${THEME.pink}10`, borderColor: `${THEME.pink}40`, color: THEME.pink }}
@@ -952,7 +1000,6 @@ export default function MonitorPage() {
               </div>
 
               <div className="w-full rounded-3xl bg-[#16161E] border border-[#2D2235] p-6 flex items-center justify-center min-h-[450px] overflow-x-auto shadow-inner">
-                {/* 🟢 [จุดที่อัปเดต] เปลี่ยนการส่ง Props ให้แมตช์กับ FloorPlan อัปเดตล่าสุด */}
                 <FloorPlan 
                   selectedTable={selectedTable}
                   onTableClick={(tableNum: string) => {
@@ -1053,7 +1100,7 @@ export default function MonitorPage() {
         )}
       </AnimatePresence>
 
-      {/* 🟢 Custom Premium Notice Modal ปิดฉากการสปอยล์ของหน้าต่างเบราว์เซอร์เก่า */}
+      {/* 🟢 Custom Premium Notice Modal */}
       <AnimatePresence>
         {appNotice.isOpen && (
           <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
@@ -1158,19 +1205,41 @@ export default function MonitorPage() {
                       <div className="grid grid-cols-1 gap-3">
                         <div>
                           <label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อคอนเสิร์ต / ศิลปิน</label>
-                          <input type="text" placeholder="e.g. Three Man Down Live" value={eventTitle} onChange={(e) => { setEventTitle(e.target.value); }} className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500" style={{ borderColor: THEME.border }} />
+                          <input 
+                            type="text" 
+                            placeholder="e.g. Three Man Down Live" 
+                            value={eventTitle} 
+                            onChange={(e) => { setEventTitle(e.target.value); }} 
+                            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} // 🟢 ดักปุ่ม Enter
+                            className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500" 
+                            style={{ borderColor: THEME.border }} 
+                          />
                         </div>
                         <div>
                           <label className="block text-xs font-semibold mb-1 text-gray-300">ราคาค่าบัตรเหมาต่อโต๊ะ (บาท)</label>
                           <div className="relative flex items-center">
                             <DollarSign size={15} className="absolute left-3.5 text-amber-400" />
-                            <input type="number" value={eventPrice} onChange={(e) => { setEventPrice(Number(e.target.value)); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono" style={{ borderColor: THEME.border }} />
+                            <input 
+                              type="number" 
+                              value={eventPrice} 
+                              onChange={(e) => { setEventPrice(Number(e.target.value)); }} 
+                              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} // 🟢 ดักปุ่ม Enter
+                              className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono" 
+                              style={{ borderColor: THEME.border }} 
+                            />
                           </div>
                         </div>
                       </div>
                       <div>
                         <label className="block text-xs font-semibold mb-1 text-gray-300 flex items-center gap-1"><FileText size={13} /> รายละเอียดของแถม</label>
-                        <textarea rows={3} placeholder="ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." value={perksNote} onChange={(e) => { setPerksNote(e.target.value); }} className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" style={{ borderColor: THEME.border }} />
+                        <textarea 
+                          rows={3} 
+                          placeholder="ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." 
+                          value={perksNote} 
+                          onChange={(e) => { setPerksNote(e.target.value); }} 
+                          className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" 
+                          style={{ borderColor: THEME.border }} 
+                        />
                       </div>
                     </div>
                   )}
@@ -1208,8 +1277,23 @@ export default function MonitorPage() {
               )}
 
               <div className="flex justify-end gap-3 pt-4 font-bold border-t border-slate-800" style={{ borderColor: THEME.border }}>
-                <button type="button" onClick={() => { setIsEventModalOpen(false); }} className="px-5 py-2.5 text-xs rounded-xl border text-white border-slate-700">ปิดหน้าต่าง</button>
-                <button type="submit" disabled={eventLoading} className="px-5 py-2.5 text-xs rounded-xl text-black flex items-center gap-1.5 font-bold" style={{ backgroundColor: THEME.gold }}><Loader2 size={14} className="animate-spin" /> อัปเดตโหมดปฏิทิน</button>
+                {/* 🟢 ปุ่มยกเลิก ซ่อน/โชว์ อัตโนมัติตามข้อมูลในฐานข้อมูล */}
+                {eventsMap[eventDate] && (
+                  <button 
+                    type="button" 
+                    disabled={eventLoading || !eventDate}
+                    onClick={handleCancelConcert} 
+                    className="mr-auto px-4 py-2.5 text-xs rounded-xl border transition-all active:scale-95 bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    ยกเลิกงานวันนี้
+                  </button>
+                )}
+                
+                <button type="button" onClick={() => { setIsEventModalOpen(false); }} className="px-5 py-2.5 text-xs rounded-xl border text-white border-slate-700 hover:bg-white/5 transition-colors">ปิดหน้าต่าง</button>
+                
+                <button type="submit" disabled={eventLoading} className="px-5 py-2.5 text-xs rounded-xl text-black flex items-center gap-1.5 font-bold transition-all disabled:opacity-70" style={{ backgroundColor: THEME.gold }}>
+                  {eventLoading ? <Loader2 size={14} className="animate-spin" /> : null} อัปเดตโหมดปฏิทิน
+                </button>
               </div>
             </form>
           </div>
