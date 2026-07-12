@@ -582,14 +582,18 @@ export default function MonitorPage() {
     }
   };
 
+  // 🟢 อัปเดต: ให้บังคับซ่อนรายการของอดีตทั้งหมด ไม่ว่าจะติด pending หรือไม่ หากไม่ได้เปิดประวัติอดีต
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return bookings.filter((b) => {
       const matchesZone = zone === 'ALL' || b.table_number?.startsWith(`${zone}-`);
       if (!matchesZone) return false;
-      if (b.status === 'pending') return true;
+      
       const liveStatus = deriveStatus(b);
+      
+      // บังคับซ่อนอดีตทั้งหมด (รวมถึง pending) ถ้าไม่ได้เปิดโหมดดูประวัติหรือไม่ได้กำลังค้นหา
       if (liveStatus === 'past' && !showPast && !q) return false;
+
       if (q) {
         return (
           b.customer_name?.toLowerCase().includes(q) ||

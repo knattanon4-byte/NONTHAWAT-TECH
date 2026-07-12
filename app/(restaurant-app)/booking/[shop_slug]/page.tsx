@@ -352,14 +352,22 @@ export default function BookingPage() {
       <div className="w-full max-w-xl z-10 flex justify-center px-2 sm:px-0 mt-8 mb-8">
         <div className="p-5 sm:p-8 border space-y-6 shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-xl rounded-3xl w-full max-w-md sm:max-w-xl" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
           
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white block">
-              <span style={{ color: THEME.pink }}>ร้าน เรๅ</span> สาขาศรีนครินทร์
+          {/* 🟢 อัปเดตส่วนหัว โชว์โลโก้ร้าน */}
+          <div className="text-center space-y-2 flex flex-col items-center">
+            <img 
+              src="/LOGO.png" 
+              alt="โลโก้ร้าน เรๅ" 
+              className="h-24 sm:h-28 w-auto object-contain mb-2 drop-shadow-[0_0_15px_rgba(255,31,136,0.3)] translate-x-3" 
+            />
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white block mt-2">
+              สาขาศรีนครินทร์
             </h1>
-            <p className="text-sm sm:text-base font-bold font-mono uppercase tracking-[0.18em]" style={{ color: THEME.gold }}>
+            <p className="text-sm sm:text-base font-bold font-mono uppercase tracking-[0.18em] pt-1" style={{ color: THEME.gold }}>
               ★ จองโต๊ะอาหารล่วงหน้า ★
             </p>
-            <p className="text-xs sm:text-sm px-1 leading-relaxed" style={{ color: THEME.muted }}>กรุณาเลือกวันเวลา และตำแหน่งโต๊ะที่ชอบบนผังร้าน (เลือกได้หลายโต๊ะ)</p>
+            <p className="text-xs sm:text-sm px-1 leading-relaxed" style={{ color: THEME.muted }}>
+              กรุณาเลือกวันเวลา และตำแหน่งโต๊ะที่ชอบบนผังร้าน (เลือกได้หลายโต๊ะ)
+            </p>
           </div>
 
           {checkingStatus ? (
@@ -595,8 +603,13 @@ export default function BookingPage() {
                 {upcomingConcerts.length > 0 ? upcomingConcerts.map((concert) => (
                   <div key={concert.id} className="bg-black/40 border border-slate-800 rounded-2xl overflow-hidden flex flex-col group hover:border-pink-500/50 transition-colors">
                     {concert.image_url && (
-                      <div className="w-full h-40 bg-slate-900 relative">
-                        <img src={concert.image_url} alt={concert.title} className="w-full h-full object-cover" />
+                      <div className="w-full relative overflow-hidden border-b border-white/5 bg-black">
+                        {/* 🟢 ปล่อยให้รูปยืดความสูงตามจริง (h-auto) รูปจะเต็มขอบ 100% โดยไม่โดนตัดหัว */}
+                        <img 
+                          src={concert.image_url} 
+                          alt={concert.title} 
+                          className="w-full h-auto object-cover hover:scale-105 transition-transform duration-300" 
+                        />
                       </div>
                     )}
                     <div className="p-4 space-y-2">
