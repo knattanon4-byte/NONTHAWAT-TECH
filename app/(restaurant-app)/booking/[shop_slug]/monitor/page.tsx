@@ -117,7 +117,6 @@ export default function MonitorPage() {
   const [eventLoading, setEventLoading] = useState(false);
   const [eventStatusMsg, setEventStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [eventDate, setEventDate] = useState('');
-  // 🟢 เพิ่มโหมด closed เข้าไปใน eventType
   const [eventType, setEventType] = useState<'normal' | 'concert' | 'closed'>('normal');
   const [eventTitle, setEventTitle] = useState('');
   const [eventPrice, setEventPrice] = useState(5000);
@@ -310,7 +309,6 @@ export default function MonitorPage() {
         uploadedImageUrl = urlData.publicUrl;
       }
       
-      // 🟢 อัปเดตข้อมูลตาม eventType (รวม closed เข้าไปด้วย)
       const eventData = {
         shop_id: shopSlug,
         event_date: eventDate,
@@ -524,7 +522,6 @@ export default function MonitorPage() {
                             🎵 โหมดอีเวนต์: {dayEvent.title} (บัตรเหมาต่อโต๊ะ {dayEvent.price.toLocaleString()}.-)
                           </span>
                         )}
-                        {/* 🟢 แจ้งเตือนวันหยุดร้านบนหน้า Feed */}
                         {dayEvent && dayEvent.event_type === 'closed' && (
                           <span className="text-[11px] px-2.5 py-0.5 rounded-md font-bold border font-sans" style={{ backgroundColor: `rgba(239, 68, 68, 0.1)`, borderColor: `rgba(239, 68, 68, 0.4)`, color: '#EF4444' }}>
                             🛑 วันหยุดร้าน (ลูกค้าจองไม่ได้)
@@ -638,9 +635,20 @@ export default function MonitorPage() {
                   </div>
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">ชื่อลูกค้า:</span> <span className="font-bold text-white text-right">{selectedBookingForSlip.customer_name}</span></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เบอร์ติดต่อ:</span> <span className="font-mono text-white text-right">{selectedBookingForSlip.phone}</span></div>
-                  <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">วันที่จอง:</span> <span className="font-mono text-white">{selectedBookingForSlip.booking_date}</span></div>
+                  
+                  {/* 🟢 อัปเดตข้อมูลตรงนี้ เพิ่มเวลาที่จอง และ Timestamp */}
+                  <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">วันที่เข้ารับบริการ:</span> <span className="font-mono text-white">{selectedBookingForSlip.booking_date}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เวลานัดหมาย:</span> <span className="font-mono text-white">{(selectedBookingForSlip.booking_time || '').slice(0, 5)} น.</span></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">จำนวนแขก:</span> <span className="font-mono text-white">{selectedBookingForSlip.guests_count} ท่าน</span></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">โต๊ะที่จอง:</span> <span className="font-bold text-emerald-400 text-right">{selectedBookingForSlip.table_number}</span></div>
                   
+                  {selectedBookingForSlip.created_at && (
+                    <div className="flex justify-between items-center border-t border-white/5 pt-3 mt-1">
+                      <span className="text-gray-500 text-[10px]">เวลาที่กดทำรายการจอง:</span> 
+                      <span className="font-mono text-gray-500 text-[10px]">{new Date(selectedBookingForSlip.created_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                    </div>
+                  )}
+
                   <div className="border-t border-slate-800/80 pt-3 mt-1 flex justify-between items-center bg-amber-500/5 -mx-4 px-4 pb-1">
                     <span className="text-amber-500/80 text-xs font-bold">ยอดที่ต้องชำระ (อ้างอิงรายโต๊ะ):</span> 
                     <span className="font-black text-amber-400 text-base">
@@ -791,7 +799,6 @@ export default function MonitorPage() {
                   <div className="mt-2 text-center border-t pt-2 text-xs font-medium text-slate-400" style={{ borderColor: THEME.border }}>วันที่เลือก: {eventDate ? <span className="text-white font-bold underline font-mono">{eventDate}</span> : <span className="text-amber-400">กรุณาคลิกเลือกบนปฏิทิน</span>}</div>
                 </div>
                 <div className="space-y-4">
-                  {/* 🟢 ส่วนปุ่มเลือกประเภทของวัน เพิ่มปุ่ม ปิดร้าน */}
                   <div>
                     <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider text-slate-300">ประเภทของวัน</label>
                     <div className="grid grid-cols-3 gap-1.5 bg-black/30 p-1 rounded-xl border h-11 items-center" style={{ borderColor: THEME.border }}>
@@ -801,7 +808,6 @@ export default function MonitorPage() {
                     </div>
                   </div>
                   
-                  {/* 🟢 แจ้งเตือนเมื่อเลือกวันหยุดร้าน */}
                   {eventType === 'closed' && (
                     <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs leading-relaxed animate-fade-in">
                       <AlertTriangle size={14} className="inline mr-1" />
