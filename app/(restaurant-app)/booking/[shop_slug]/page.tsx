@@ -49,7 +49,6 @@ export default function BookingPage() {
   const [showConcertModal, setShowConcertModal] = useState(false);
   const [concertEvent, setConcertEvent] = useState<any>(null);
 
-  // 🟢 State สำหรับ List คอนเสิร์ตทั้งหมด
   const [showConcertListModal, setShowConcertListModal] = useState(false);
   const [upcomingConcerts, setUpcomingConcerts] = useState<any[]>([]);
 
@@ -80,6 +79,49 @@ export default function BookingPage() {
     setShowErrorModal(true);
   };
 
+  // ----------------------------------------------------
+  // 🛠️ LOGIC: คำนวณวันปัจจุบันและจำกัด 15 วันล่วงหน้า (ล็อก Timezone ไทย)
+  // ----------------------------------------------------
+  const getBKKDate = useCallback((addDays = 0) => {
+    const d = new Date();
+    const bkkTime = new Date(d.toLocaleString("en-US", {timeZone: "Asia/Bangkok"}));
+    bkkTime.setDate(bkkTime.getDate() + addDays);
+    const year = bkkTime.getFullYear();
+    const month = String(bkkTime.getMonth() + 1).padStart(2, '0');
+    const day = String(bkkTime.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const todayStr = getBKKDate(0);
+  const maxDateStr = getBKKDate(15);
+
+  // ----------------------------------------------------
+  // 🛠️ LOGIC: เช็กเงื่อนไขเวลาเกิน 19:00 น. ของวันปัจจุบัน
+  // ----------------------------------------------------
+  const handleDateSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.value;
+    
+    if (!selected) {
+      setBookingDate('');
+      return;
+    }
+
+    if (selected === todayStr) {
+      // ดึงเวลาชั่วโมงปัจจุบันของไทย
+      const currentHourStr = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Bangkok', hour12: false, hour: 'numeric' });
+      const currentHour = parseInt(currentHourStr, 10);
+
+      // ถ้าเกิน 19:00 น. ห้ามจองของวันนี้
+      if (currentHour >= 19) {
+        triggerError('ไม่สามารถจองในเวลาดังกล่าวได้ ติดต่อทางร้านเพื่อทำการจองคิว');
+        setBookingDate(''); 
+        return;
+      }
+    }
+    
+    setBookingDate(selected);
+  };
+
   useEffect(() => {
     let active = true;
     const checkShopStatus = async () => {
@@ -104,22 +146,17 @@ export default function BookingPage() {
     checkShopStatus();
   }, [shopSlug]);
 
-  // 🟢 ดึงข้อมูลคอนเสิร์ตทั้งหมดที่มีในอนาคตมาแสดงเป็น List และแมปปฏิทิน
   useEffect(() => {
     const fetchUpcomingConcerts = async () => {
-      const today = new Date().toISOString().split('T')[0];
       const { data } = await supabase
         .from('shop_events')
         .select('*')
         .eq('shop_id', shopSlug)
-        .gte('event_date', today)
+        .gte('event_date', todayStr)
         .order('event_date', { ascending: true });
       
       if (data) {
-        // แยกเก็บเป็นลิสต์คอนเสิร์ต
         setUpcomingConcerts(data.filter((e: any) => e.event_type === 'concert'));
-        
-        // แยกเก็บเป็น Map ไว้เช็กวันที่
         const mapped = data.reduce((acc, curr: any) => ({
           ...acc,
           [curr.event_date]: curr
@@ -128,13 +165,10 @@ export default function BookingPage() {
       }
     };
     fetchUpcomingConcerts();
-  }, [shopSlug]);
+  }, [shopSlug, todayStr]);
 
-  // เช็ก event รายวันเมื่อลูกค้ากดเลือกวันที่
   useEffect(() => {
     if (!bookingDate) return;
-    
-    // ดึงข้อมูลจาก eventsMap แทนการยิงฐานข้อมูลใหม่
     const eventData = eventsMap[bookingDate];
     
     if (eventData && eventData.event_type === 'concert') {
@@ -352,22 +386,11 @@ export default function BookingPage() {
       <div className="w-full max-w-xl z-10 flex justify-center px-2 sm:px-0 mt-8 mb-8">
         <div className="p-5 sm:p-8 border space-y-6 shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-xl rounded-3xl w-full max-w-md sm:max-w-xl" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
           
-          {/* 🟢 อัปเดตส่วนหัว โชว์โลโก้ร้าน */}
           <div className="text-center space-y-2 flex flex-col items-center">
-            <img 
-              src="/LOGO.png" 
-              alt="โลโก้ร้าน เรๅ" 
-              className="h-24 sm:h-28 w-auto object-contain mb-2 drop-shadow-[0_0_15px_rgba(255,31,136,0.3)] translate-x-3" 
-            />
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white block mt-2">
-              สาขาศรีนครินทร์
-            </h1>
-            <p className="text-sm sm:text-base font-bold font-mono uppercase tracking-[0.18em] pt-1" style={{ color: THEME.gold }}>
-              ★ จองโต๊ะอาหารล่วงหน้า ★
-            </p>
-            <p className="text-xs sm:text-sm px-1 leading-relaxed" style={{ color: THEME.muted }}>
-              กรุณาเลือกวันเวลา และตำแหน่งโต๊ะที่ชอบบนผังร้าน (เลือกได้หลายโต๊ะ)
-            </p>
+            <img src="/LOGO.png" alt="โลโก้ร้าน เรๅ" className="h-24 sm:h-28 w-auto object-contain mb-2 drop-shadow-[0_0_15px_rgba(255,31,136,0.3)] translate-x-3" />
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white block mt-2">สาขาศรีนครินทร์</h1>
+            <p className="text-sm sm:text-base font-bold font-mono uppercase tracking-[0.18em] pt-1" style={{ color: THEME.gold }}>★ จองโต๊ะอาหารล่วงหน้า ★</p>
+            <p className="text-xs sm:text-sm px-1 leading-relaxed" style={{ color: THEME.muted }}>กรุณาเลือกวันเวลา และตำแหน่งโต๊ะที่ชอบบนผังร้าน (เลือกได้หลายโต๊ะ)</p>
           </div>
 
           {checkingStatus ? (
@@ -385,13 +408,8 @@ export default function BookingPage() {
           ) : (
             <form onSubmit={handleBooking} className="space-y-5 text-base w-full">
               
-              {/* ปุ่มกดดูลิสต์คอนเสิร์ตทั้งหมด */}
               {upcomingConcerts.length > 0 && (
-                <button 
-                  type="button" 
-                  onClick={() => setShowConcertListModal(true)}
-                  className="w-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-xl p-3 flex items-center justify-between hover:bg-pink-500/30 transition-all group"
-                >
+                <button type="button" onClick={() => setShowConcertListModal(true)} className="w-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-xl p-3 flex items-center justify-between hover:bg-pink-500/30 transition-all group">
                   <div className="flex items-center gap-2">
                     <div className="bg-pink-500 text-white p-1.5 rounded-lg group-hover:scale-110 transition-transform"><Music size={16} /></div>
                     <span className="font-bold text-sm text-pink-100 tracking-wide">ดูตารางปาร์ตี้คอนเสิร์ตทั้งหมด 🎉</span>
@@ -400,198 +418,177 @@ export default function BookingPage() {
                 </button>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full bg-black/30 p-3 rounded-2xl border" style={{ borderColor: `${THEME.gold}20` }}>
+              {/* 🟢 STEP 1: วันที่ (โชว์เสมอเป็นตัวนำ) */}
+              <div className="w-full bg-black/30 p-4 rounded-2xl border" style={{ borderColor: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? THEME.pink : `${THEME.gold}20` }}>
                 <div className="space-y-2 w-full min-w-0">
                   <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 font-mono" style={{ color: THEME.gold }}>
                     <Calendar size={15} /> 1. เลือกวันที่ต้องการจอง
                   </label>
-                  <div 
-                    className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-300 focus-within:border-amber-400" 
-                    style={{ 
-                      borderColor: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? THEME.pink : THEME.border,
-                      boxShadow: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? `0 0 15px ${THEME.pink}40` : 'none'
-                    }}
-                  >
+                  <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-300 focus-within:border-amber-400" style={{ borderColor: THEME.border, boxShadow: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? `0 0 15px ${THEME.pink}40` : 'none' }}>
                     <input 
                       type="date" 
                       required 
-                      min={new Date().toISOString().split('T')[0]} 
+                      min={todayStr} 
+                      max={maxDateStr}
                       value={bookingDate} 
-                      onChange={(e) => setBookingDate(e.target.value)} 
+                      onChange={handleDateSelection} 
                       className="w-full h-full appearance-none bg-transparent px-4 text-white outline-none text-base color-scheme-dark block min-w-0 box-border iOS-date-input" 
                     />
                   </div>
-                  {/* แจ้งเตือนวันคอนเสิร์ตใต้ปฏิทินแบบเรียลไทม์ */}
                   <AnimatePresence>
                     {bookingDate && eventsMap[bookingDate]?.event_type === 'concert' && (
-                      <motion.div 
-                        initial={{ opacity: 0, y: -10, height: 0 }} 
-                        animate={{ opacity: 1, y: 0, height: 'auto' }} 
-                        exit={{ opacity: 0, y: -10, height: 0 }}
-                        className="text-xs font-bold flex items-center gap-1.5 px-2 pt-1"
-                        style={{ color: THEME.pink }}
-                      >
-                        <Music size={14} className="animate-pulse" /> 
-                        วันนี้มีอีเวนต์พิเศษ: {eventsMap[bookingDate].title}
+                      <motion.div initial={{ opacity: 0, y: -10, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: -10, height: 0 }} className="text-xs font-bold flex items-center gap-1.5 px-2 pt-1" style={{ color: THEME.pink }}>
+                        <Music size={14} className="animate-pulse" /> วันนี้มีอีเวนต์พิเศษ: {eventsMap[bookingDate].title}
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
-
-                <div className="space-y-2 w-full">
-                  <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                    <Clock size={15} /> 2. ระบุเวลาเข้าโต๊ะ
-                  </label>
-                  <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
-                    <select 
-                      value={bookingTime} 
-                      onChange={(e) => setBookingTime(e.target.value)} 
-                      className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-medium"
-                    >
-                      <option value="19:00" style={{ backgroundColor: THEME.card }}>19:00 น. </option>
-                      <option value="20:00" style={{ backgroundColor: THEME.card }}>20:00 น. </option>
-                      <option value="21:00" style={{ backgroundColor: THEME.card }}>21:00 น. </option>
-                      <option value="22:00" style={{ backgroundColor: THEME.card }}>22:00 น. </option>
-                      <option value="23:00" style={{ backgroundColor: THEME.card }}>23:00 น.</option>
-                    </select>
-                    <ChevronDown size={16} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} />
-                  </div>
-                </div>
               </div>
 
-              <div className="space-y-2 w-full">
-                <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-200 leading-tight">
-                  3. คลิกเลือกตำแหน่งโต๊ะอาหารบนแผนผังร้าน <span className="text-pink-400 text-xs ml-1">(เลือกได้หลายโต๊ะ)</span>
-                </label>
-                <div className="w-full rounded-2xl bg-black/40 p-1 border box-sizing-border overflow-x-auto relative min-h-[220px] flex items-center justify-center transition-all duration-300" style={{ borderColor: THEME.border }}>
-                  {bookingDate ? (
-                    <FloorPlan 
-                      selectedTables={selectedTables} 
-                      setSelectedTables={setSelectedTables} 
-                      dayTables={dayTables} 
-                    />
-                  ) : (
-                    <div className="text-center p-8 space-y-2.5 animate-pulse">
-                      <div className="w-10 h-10 rounded-full bg-black/40 border flex items-center justify-center mx-auto mb-1" style={{ borderColor: `${THEME.gold}30`, color: THEME.gold }}>
-                        <AlertTriangle size={18} />
+              {/* 🟢 CONDITIONAL UI: ถ้ายังไม่เลือกวัน ให้โชว์การ์ดเงื่อนไข / ถ้าเลือกแล้วโชว์ฟอร์มที่เหลือ */}
+              {!bookingDate ? (
+                <div className="mt-4 p-5 sm:p-6 bg-[#0D1424] border border-[#1E293B] rounded-2xl space-y-5 shadow-lg w-full">
+                  <div className="space-y-3">
+                    <h4 className="text-cyan-400 font-bold text-base text-center tracking-wide">เงื่อนไขการจองโต๊ะ</h4>
+                    <ul className="text-slate-300 space-y-2 text-sm">
+                      <li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> 1 โต๊ะ สามารถอยู่ได้ขั้นต่ำ 4 ท่าน</li>
+                      <li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> สามารถจองล่วงหน้าได้ 15 วัน</li>
+                      <li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> ปิดรับจองโต๊ะเวลา 19:00 น. ของทุกวัน</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="w-full h-px bg-[#1E293B]"></div>
+                  
+                  <div className="space-y-3">
+                    <h4 className="text-purple-400 font-bold text-base text-center tracking-wide">เงื่อนไขการปล่อยโต๊ะ</h4>
+                    <ul className="text-slate-300 space-y-2 text-sm">
+                      <li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> กรุณามารับโต๊ะภายในเวลาที่ท่านเลือกจองไว้</li>
+                    
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-center">
+                    <p className="text-cyan-400 font-mono text-[11px] sm:text-xs animate-pulse font-semibold">กรุณาเลือกวันที่ด้านบน เพื่อเริ่มทำรายการจอง</p>
+                  </div>
+                </div>
+              ) : (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5 w-full">
+                  
+                  {/* เวลาเข้าโต๊ะ */}
+                  <div className="space-y-2 w-full">
+                    <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
+                      <Clock size={15} /> 2. ระบุเวลาเข้าโต๊ะ
+                    </label>
+                    <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
+                      <select 
+                        value={bookingTime} 
+                        onChange={(e) => setBookingTime(e.target.value)} 
+                        className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-medium"
+                      >
+                        <option value="19:00" style={{ backgroundColor: THEME.card }}>19:00 น. </option>
+                        <option value="20:00" style={{ backgroundColor: THEME.card }}>20:00 น. </option>
+                        <option value="21:00" style={{ backgroundColor: THEME.card }}>21:00 น. </option>
+                        <option value="22:00" style={{ backgroundColor: THEME.card }}>22:00 น. </option>
+                        <option value="23:00" style={{ backgroundColor: THEME.card }}>23:00 น.</option>
+                      </select>
+                      <ChevronDown size={16} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} />
+                    </div>
+                  </div>
+
+                  {/* แผนผังร้าน */}
+                  <div className="space-y-2 w-full">
+                    <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-200 leading-tight">
+                      3. คลิกเลือกตำแหน่งโต๊ะอาหารบนแผนผังร้าน <span className="text-pink-400 text-xs ml-1">(เลือกได้หลายโต๊ะ)</span>
+                    </label>
+                    <div className="w-full rounded-2xl bg-black/40 p-1 border box-sizing-border overflow-x-auto relative min-h-[220px] flex items-center justify-center transition-all duration-300" style={{ borderColor: THEME.border }}>
+                      <FloorPlan selectedTables={selectedTables} setSelectedTables={setSelectedTables} dayTables={dayTables} />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 mt-3 text-[10px] sm:text-xs font-medium text-slate-300 w-full">
+                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 border border-purple-700"></span> VIP ว่าง</div>
+                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500 border border-emerald-700"></span> ว่าง</div>
+                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-sky-400 border border-white animate-pulse"></span> โต๊ะที่เลือก</div>
+                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500 border border-red-700"></span> จองแล้ว</div>
+                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500 border border-amber-600 animate-pulse"></span> รอชำระเงิน</div>
+                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-slate-800 border border-slate-700 opacity-60"></span> ปิดใช้งาน</div>
+                    </div>
+                  </div>
+
+                  {/* ข้อมูลลูกค้า */}
+                  <div className="space-y-4 pt-1 w-full">
+                    <div className="space-y-2 w-full">
+                      <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
+                        <User size={16} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง
+                      </label>
+                      <input 
+                        type="text" required 
+                        placeholder="กรอกชื่อและนามสกุลของคุณ..." 
+                        value={customerName} onChange={(e) => setCustomerName(e.target.value)} 
+                        className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" 
+                        style={{ borderColor: THEME.border }} 
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                      <div className="space-y-2 w-full">
+                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
+                          <Phone size={16} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ
+                        </label>
+                        <input 
+                          type="tel" required 
+                          placeholder="08X-XXX-XXXX" 
+                          value={phone} onChange={(e) => setPhone(e.target.value)} 
+                          className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" 
+                          style={{ borderColor: THEME.border }} 
+                        />
                       </div>
-                      <p className="text-sm font-bold" style={{ color: THEME.gold }}>กรุณาเลือก "วันที่ต้องการจอง" ด้านบนก่อนครับ</p>
+
+                      <div className="space-y-2 w-full">
+                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
+                          <Users size={16} style={{ color: THEME.pink }} /> จำนวนสมาชิก <span className="text-xs ml-1" style={{ color: THEME.gold }}>(ขั้นต่ำ 4 คน)</span>
+                        </label>
+                        <div className="relative flex items-center justify-between rounded-xl border bg-black/20 w-full h-12 px-3 transition-all duration-200" style={{ borderColor: THEME.border }}>
+                          <button type="button" disabled={selectedTables.length === 0 || guestsCount <= minAllowedGuests} onClick={() => setGuestsCount(prev => Math.max(minAllowedGuests, prev - 1))} className="w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"><Minus size={14} /></button>
+                          <input 
+                            type="number" disabled={selectedTables.length === 0} placeholder="ระบุจำนวน"
+                            value={selectedTables.length === 0 || guestsCount === 0 ? '' : guestsCount} 
+                            onChange={(e) => { const val = e.target.value; setGuestsCount(val === '' ? 0 : parseInt(val, 10)); }}
+                            className="w-16 bg-transparent text-center text-white outline-none text-base font-bold text-pink-400 block h-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                          <button type="button" disabled={selectedTables.length === 0} onClick={() => setGuestsCount(prev => prev + 1)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"><Plus size={14} /></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedTables.length > 0 && (
+                    <div className="p-3.5 rounded-xl border flex items-center justify-between font-mono text-xs sm:text-sm bg-emerald-500/10 border-emerald-500/30 text-emerald-400 w-full animate-fade-in">
+                      <span className="flex items-center gap-1.5 font-bold"><CheckCircle2 size={14} /> STATUS: {selectedTables.length} NODES SELECTED</span>
+                      <span className="font-bold">คุณเลือก: โต๊ะ {selectedTables.join(', ')}</span>
                     </div>
                   )}
-                </div>
 
-                {/* 🟢 คำอธิบายสีสถานะโต๊ะ (Legend) */}
-                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 mt-3 text-[10px] sm:text-xs font-medium text-slate-300 w-full">
-                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500 border border-emerald-700"></span> ว่าง</div>
-                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-sky-400 border border-white animate-pulse"></span> โต๊ะที่เลือก</div>
-                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500 border border-red-700"></span> จองแล้ว</div>
-                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500 border border-amber-600 animate-pulse"></span> รอชำระเงิน</div>
-                  <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-slate-800 border border-slate-700 opacity-60"></span> ปิดใช้งาน</div>
-                </div>
-              </div>
-
-              <div className="space-y-4 pt-1 w-full">
-                <div className="space-y-2 w-full">
-                  <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                    <User size={16} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง
-                  </label>
-                  <input 
-                    type="text" 
-                    required 
-                    disabled={!bookingDate}
-                    placeholder={bookingDate ? "กรอกชื่อและนามสกุลของคุณ..." : "กรุณาเลือกวันที่ด้านบนก่อน..."} 
-                    value={customerName} 
-                    onChange={(e) => setCustomerName(e.target.value)} 
-                    className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 disabled:opacity-30 disabled:cursor-not-allowed focus:border-purple-500 box-border" 
-                    style={{ borderColor: THEME.border }} 
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-                  <div className="space-y-2 w-full">
-                    <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                      <Phone size={16} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ
-                    </label>
-                    <input 
-                      type="tel" 
-                      required 
-                      disabled={!bookingDate}
-                      placeholder={bookingDate ? "08X-XXX-XXXX" : "กรุณาเลือกวันที่ด้านบนก่อน..."} 
-                      value={phone} 
-                      onChange={(e) => setPhone(e.target.value)} 
-                      className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 disabled:opacity-30 disabled:cursor-not-allowed focus:border-purple-500 box-border" 
-                      style={{ borderColor: THEME.border }} 
-                    />
-                  </div>
-
-                  <div className="space-y-2 w-full">
-                    <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                      <Users size={16} style={{ color: THEME.pink }} /> จำนวนสมาชิก <span className="text-xs ml-1" style={{ color: THEME.gold }}>(ขั้นต่ำ 4 คน)</span>
-                    </label>
-                    <div className="relative flex items-center justify-between rounded-xl border bg-black/20 w-full h-12 px-3 transition-all duration-200" style={{ borderColor: THEME.border, opacity: bookingDate ? 1 : 0.3 }}>
-                      <button 
-                        type="button" 
-                        disabled={!bookingDate || selectedTables.length === 0 || guestsCount <= minAllowedGuests} 
-                        onClick={() => setGuestsCount(prev => Math.max(minAllowedGuests, prev - 1))} 
-                        className="w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"
-                      >
-                        <Minus size={14} />
-                      </button>
-
-                      <input 
-                        type="number"
-                        disabled={!bookingDate || selectedTables.length === 0}
-                        placeholder="ระบุจำนวน"
-                        value={selectedTables.length === 0 || guestsCount === 0 ? '' : guestsCount} 
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setGuestsCount(val === '' ? 0 : parseInt(val, 10));
-                        }}
-                        className="w-16 bg-transparent text-center text-white outline-none text-base font-bold text-pink-400 block h-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      />
-
-                      <button 
-                        type="button" 
-                        disabled={!bookingDate || selectedTables.length === 0} 
-                        onClick={() => setGuestsCount(prev => prev + 1)} 
-                        className="w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"
-                      >
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {selectedTables.length > 0 && (
-                <div className="p-3.5 rounded-xl border flex items-center justify-between font-mono text-xs sm:text-sm bg-emerald-500/10 border-emerald-500/30 text-emerald-400 w-full animate-fade-in">
-                  <span className="flex items-center gap-1.5 font-bold"><CheckCircle2 size={14} /> STATUS: {selectedTables.length} NODES SELECTED</span>
-                  <span className="font-bold">คุณเลือก: โต๊ะ {selectedTables.join(', ')}</span>
-                </div>
+                  <button 
+                    type="submit" 
+                    disabled={loading || selectedTables.length === 0} 
+                    className="w-full mt-3 py-4 text-base font-bold tracking-wide rounded-xl transition-all active:scale-[0.98] disabled:opacity-20 disabled:scale-100 flex items-center justify-center gap-1.5 text-black font-sans" 
+                    style={{ backgroundColor: THEME.gold, boxShadow: selectedTables.length > 0 ? `0 4px 25px rgba(229, 184, 66, 0.4)` : 'none' }} 
+                  >
+                    {loading ? 'PROCESSING VECTOR...' : 'ยืนยันรหัสจองและจัดโต๊ะ'}
+                  </button>
+                </motion.div>
               )}
-
-              <button 
-                type="submit" 
-                disabled={loading || selectedTables.length === 0 || !bookingDate} 
-                className="w-full mt-3 py-4 text-base font-bold tracking-wide rounded-xl transition-all active:scale-[0.98] disabled:opacity-20 disabled:scale-100 flex items-center justify-center gap-1.5 text-black font-sans" 
-                style={{ backgroundColor: THEME.gold, boxShadow: selectedTables.length > 0 && bookingDate ? `0 4px 25px rgba(229, 184, 66, 0.4)` : 'none' }} 
-              >
-                {loading ? 'PROCESSING VECTOR...' : 'ยืนยันรหัสจองและจัดโต๊ะ'}
-              </button>
             </form>
           )}
         </div>
       </div>
 
-      {/* ================= 🟢 POP-UP CONCERT LIST (ตารางคอนเสิร์ต) ================= */}
+      {/* ================= 🟢 POP-UP CONCERT LIST ================= */}
       <AnimatePresence>
         {showConcertListModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowConcertListModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 10 }} 
-              animate={{ opacity: 1, scale: 1, y: 0 }} 
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
               className="w-full max-w-md h-[80vh] flex flex-col relative overflow-hidden rounded-3xl z-10 shadow-2xl bg-[#16161E] border border-[#2D2235]"
             >
               <div className="flex items-center justify-between p-5 border-b border-white/5 bg-black/20">
@@ -603,14 +600,7 @@ export default function BookingPage() {
                 {upcomingConcerts.length > 0 ? upcomingConcerts.map((concert) => (
                   <div key={concert.id} className="bg-black/40 border border-slate-800 rounded-2xl overflow-hidden flex flex-col group hover:border-pink-500/50 transition-colors">
                     {concert.image_url && (
-                      <div className="w-full relative overflow-hidden border-b border-white/5 bg-black">
-                        {/* 🟢 ปล่อยให้รูปยืดความสูงตามจริง (h-auto) รูปจะเต็มขอบ 100% โดยไม่โดนตัดหัว */}
-                        <img 
-                          src={concert.image_url} 
-                          alt={concert.title} 
-                          className="w-full h-auto object-cover hover:scale-105 transition-transform duration-300" 
-                        />
-                      </div>
+                      <div className="w-full relative overflow-hidden border-b border-white/5 bg-black"><img src={concert.image_url} alt={concert.title} className="w-full h-auto object-cover hover:scale-105 transition-transform duration-300" /></div>
                     )}
                     <div className="p-4 space-y-2">
                       <div className="flex justify-between items-start">
@@ -618,30 +608,20 @@ export default function BookingPage() {
                         <span className="text-xs bg-pink-500/20 text-pink-400 px-2 py-1 rounded-md font-bold whitespace-nowrap ml-2">{concert.event_date}</span>
                       </div>
                       <p className="text-amber-400 font-bold text-sm">บัตรเหมาต่อโต๊ะ: {concert.price.toLocaleString()} THB</p>
-                      
                       {concert.perks_note && (
                         <div className="pt-2 mt-2 border-t border-white/5">
                           <p className="text-[11px] text-slate-400 font-bold mb-1">หมายเหตุและเงื่อนไข:</p>
                           <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{concert.perks_note}</p>
                         </div>
                       )}
-
                       <button 
-                        onClick={() => {
-                          setBookingDate(concert.event_date);
-                          setShowConcertListModal(false);
-                        }}
+                        onClick={() => { setBookingDate(concert.event_date); setShowConcertListModal(false); }}
                         className="w-full mt-3 py-2.5 bg-white/5 hover:bg-pink-500 hover:text-white text-slate-300 rounded-xl text-sm font-bold transition-all border border-slate-700 hover:border-pink-500"
-                      >
-                        เลือกคอนเสิร์ตนี้
-                      </button>
+                      >เลือกคอนเสิร์ตนี้</button>
                     </div>
                   </div>
                 )) : (
-                  <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2">
-                    <Music size={32} className="opacity-20" />
-                    <p>ยังไม่มีคิวงานคอนเสิร์ตในขณะนี้</p>
-                  </div>
+                  <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2"><Music size={32} className="opacity-20" /><p>ยังไม่มีคิวงานคอนเสิร์ตในขณะนี้</p></div>
                 )}
               </div>
             </motion.div>
@@ -653,54 +633,22 @@ export default function BookingPage() {
       <AnimatePresence>
         {showConcertModal && concertEvent && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setShowConcertModal(false); setBookingDate(''); }} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
             <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              onClick={() => { setShowConcertModal(false); setBookingDate(''); }} 
-              className="fixed inset-0 bg-black/85 backdrop-blur-sm" 
-            />
-            
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 10 }} 
-              animate={{ opacity: 1, scale: 1, y: 0 }} 
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-sm min-h-[500px] relative overflow-hidden rounded-[2rem] z-10 flex flex-col justify-end shadow-2xl"
-              style={{ backgroundColor: THEME.card }}
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-sm min-h-[500px] relative overflow-hidden rounded-[2rem] z-10 flex flex-col justify-end shadow-2xl" style={{ backgroundColor: THEME.card }}
             >
-              <button 
-                onClick={() => { setShowConcertModal(false); setBookingDate(''); }} 
-                className="absolute right-4 top-4 p-2 rounded-full bg-black/40 backdrop-blur-md text-white hover:bg-black/60 z-20 transition-colors"
-              >
-                <X size={18} />
-              </button>
-              
-              {concertEvent.image_url && (
-                <img src={concertEvent.image_url} alt="Concert Poster" className="absolute inset-0 w-full h-full object-cover z-0" />
-              )}
-              
+              <button onClick={() => { setShowConcertModal(false); setBookingDate(''); }} className="absolute right-4 top-4 p-2 rounded-full bg-black/40 backdrop-blur-md text-white hover:bg-black/60 z-20 transition-colors"><X size={18} /></button>
+              {concertEvent.image_url && <img src={concertEvent.image_url} alt="Concert Poster" className="absolute inset-0 w-full h-full object-cover z-0" />}
               <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0E] via-[#0A0A0E]/80 to-transparent z-0 pointer-events-none" />
-
               <div className="relative z-10 p-6 flex flex-col items-center text-center w-full mt-auto">
-                 <h2 className="text-sm font-black text-white bg-black/40 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full mb-2">
-                   {concertEvent.event_date}
-                 </h2>
-                 <h3 className="text-3xl font-black text-white mb-4 drop-shadow-lg">
-                   {concertEvent.title || 'Concert Event'}
-                 </h3>
-                 
+                 <h2 className="text-sm font-black text-white bg-black/40 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full mb-2">{concertEvent.event_date}</h2>
+                 <h3 className="text-3xl font-black text-white mb-4 drop-shadow-lg">{concertEvent.title || 'Concert Event'}</h3>
                  <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-3xl p-5 w-full text-sm font-bold shadow-xl whitespace-pre-line leading-relaxed">
                     {concertEvent.perks_note || `โปรโมชั่นสำหรับวันนี้จองขั้นต่ำ 2 โต๊ะ\nเตรียมพร้อมมาสนุกสุดเหวี่ยง\nไปพร้อมกับสาวๆ ทั้ง 5 คนได้เลย\nราคาต่อโต๊ะ ${concertEvent.price} ฿`}
                  </div>
-                 
                  <p className="text-xs text-amber-400 mt-4 font-bold animate-pulse drop-shadow-md">คลิกด้านล่างเพื่อทำการจอง</p>
-                 
-                 <button 
-                  onClick={() => setShowConcertModal(false)} 
-                  className="mt-3 w-[80%] py-3.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black rounded-full shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-transform active:scale-95"
-                 >
-                   จองโต๊ะ
-                 </button>
+                 <button onClick={() => setShowConcertModal(false)} className="mt-3 w-[80%] py-3.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black rounded-full shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-transform active:scale-95">จองโต๊ะ</button>
               </div>
             </motion.div>
           </div>
@@ -713,24 +661,13 @@ export default function BookingPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowErrorModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.92, y: 15 }} 
-              animate={{ opacity: 1, scale: 1, y: 0 }} 
-              exit={{ opacity: 0, scale: 0.92, y: 15 }}
-              className="w-full max-w-sm border shadow-2xl relative overflow-hidden rounded-2xl p-6 text-center z-10"
-              style={{ backgroundColor: THEME.card, borderColor: `${THEME.pink}50` }}
+              initial={{ opacity: 0, scale: 0.92, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 15 }}
+              className="w-full max-w-sm border shadow-2xl relative overflow-hidden rounded-2xl p-6 text-center z-10" style={{ backgroundColor: THEME.card, borderColor: `${THEME.pink}50` }}
             >
-              <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-red-500/10 border border-red-500/30 text-red-400">
-                <AlertTriangle size={24} className="animate-bounce" />
-              </div>
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-red-500/10 border border-red-500/30 text-red-400"><AlertTriangle size={24} className="animate-bounce" /></div>
               <h3 className="text-base font-extrabold text-white tracking-wide">ระบบตรวจพบข้อขัดข้อง</h3>
               <p className="text-xs text-gray-400 leading-relaxed mt-2 px-1">{errorMessage}</p>
-              <button 
-                onClick={() => setShowErrorModal(false)} 
-                className="w-full mt-5 py-2.5 font-bold rounded-xl text-xs transition-colors text-white border hover:bg-white/5 active:scale-95"
-                style={{ borderColor: THEME.border }}
-              >
-                รับทราบและกลับไปแก้ไข
-              </button>
+              <button onClick={() => setShowErrorModal(false)} className="w-full mt-5 py-2.5 font-bold rounded-xl text-xs transition-colors text-white border hover:bg-white/5 active:scale-95" style={{ borderColor: THEME.border }}>รับทราบและกลับไปแก้ไข</button>
             </motion.div>
           </div>
         )}
