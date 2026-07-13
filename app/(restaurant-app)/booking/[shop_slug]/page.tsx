@@ -5,7 +5,7 @@ import { useParams, notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { jsPDF as PDFInstance } from 'jspdf';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTriangle, ChevronDown, QrCode, ArrowRight, Plus, Minus, X, Music, ClipboardCheck } from 'lucide-react';
+import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTriangle, ChevronDown, QrCode, ArrowRight, Plus, Minus, X, Music, ClipboardCheck, UploadCloud, ImageIcon, Info } from 'lucide-react';
 import FloorPlan from '@/components/booking/FloorPlan';
 
 const SHOP_PROMPTPAY_ID = '0922657200'; 
@@ -25,29 +25,20 @@ interface BookingRecord {
 }
 
 const THEME = {
-  bg: '#0A0A0E',
-  card: '#16161E',
-  border: '#2D2235',
-  pink: '#FF1F88',
-  gold: '#E5B842',
-  purple: '#8A3FFC',
-  text: '#F1F1F5',
-  muted: '#9E9EAF',
+  bg: '#0A0A0E', card: '#16161E', border: '#2D2235', pink: '#FF1F88',
+  gold: '#E5B842', purple: '#8A3FFC', text: '#F1F1F5', muted: '#9E9EAF',
 };
 
 export default function BookingPage() {
   const params = useParams();
   const shopSlug = (params?.shop_slug as string) || 'default-shop';
 
-  // Modal States
   const [showModal, setShowModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   
   const [showConcertModal, setShowConcertModal] = useState(false);
   const [showConcertListModal, setShowConcertListModal] = useState(false);
-  
-  // 🟢 State ใหม่: สำหรับโชว์หน้าต่างยืนยันข้อมูลก่อนจ่ายเงิน
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const [concertEvent, setConcertEvent] = useState<any>(null);
@@ -60,7 +51,6 @@ export default function BookingPage() {
   const [checkingStatus, setCheckingStatus] = useState(true); 
   const [shopExists, setShopExists] = useState(true);
 
-  // Form States
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [bookingDate, setBookingDate] = useState('');
@@ -69,16 +59,14 @@ export default function BookingPage() {
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
   const [dayTables, setDayTables] = useState<Record<string, 'booked' | 'pending'>>({});
   
+  const [slipFile, setSlipFile] = useState<File | null>(null);
   const [currentEventPrice, setCurrentEventPrice] = useState(0);
   const [eventsMap, setEventsMap] = useState<Record<string, any>>({});
 
   const formattedShopName = 'ร้าน เรๅ สาขาศรีนครินทร์';
   const minAllowedGuests = 4;
 
-  const triggerError = (msg: string) => {
-    setErrorMessage(msg);
-    setShowErrorModal(true);
-  };
+  const triggerError = (msg: string) => { setErrorMessage(msg); setShowErrorModal(true); };
 
   const getBKKDate = useCallback((addDays = 0) => {
     const d = new Date();
@@ -96,6 +84,13 @@ export default function BookingPage() {
   const handleDateSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.value;
     if (!selected) { setBookingDate(''); return; }
+
+    // 🟢 ดักตรวจสอบว่าเป็น "วันหยุดร้าน" หรือไม่
+    if (eventsMap[selected]?.event_type === 'closed') {
+      triggerError('ขออภัยครับ ทางร้านหยุดให้บริการในวันที่ท่านเลือก กรุณาเลือกวันอื่นครับ');
+      setBookingDate(''); 
+      return;
+    }
 
     if (selected === todayStr) {
       const currentHourStr = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Bangkok', hour12: false, hour: 'numeric' });
@@ -124,6 +119,7 @@ export default function BookingPage() {
 
   useEffect(() => {
     const fetchUpcomingConcerts = async () => {
+      // โหลดทุก event เพื่อเอามาเช็คทั้งคอนเสิร์ตและวันหยุด
       const { data } = await supabase.from('shop_events').select('*').eq('shop_id', shopSlug).gte('event_date', todayStr).order('event_date', { ascending: true });
       if (data) {
         setUpcomingConcerts(data.filter((e: any) => e.event_type === 'concert'));
@@ -181,12 +177,17 @@ export default function BookingPage() {
     return () => { active = false; supabase.removeChannel(realtimeChannel); };
   }, [bookingDate, fetchTodayBookings, shopSlug]);
 
-  useEffect(() => {
-    setSelectedTables([]);
-    setGuestsCount(4);
-  }, [bookingDate]);
+  useEffect(() => { setSelectedTables([]); setGuestsCount(4); setSlipFile(null); }, [bookingDate]);
 
-  // 🟢 STEP 1: ตรวจสอบความถูกต้อง แล้วโชว์หน้าต่างยืนยัน (Pre-Booking)
+  const uploadSlipToSupabase = async (file: File) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const { error } = await supabase.storage.from('slips').upload(fileName, file);
+    if (error) throw error;
+    const { data: urlData } = supabase.storage.from('slips').getPublicUrl(fileName);
+    return urlData.publicUrl;
+  };
+
   const handlePreBooking = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !phone.trim() || !bookingDate || selectedTables.length === 0) return;
@@ -203,23 +204,30 @@ export default function BookingPage() {
       setGuestsCount(4); return;
     }
 
-    // เซ็ตราคาสำหรับสรุปยอด
     const eventData = eventsMap[bookingDate];
-    setCurrentEventPrice(eventData?.price || 0);
+    // 🟢 ดักให้ชัวร์อีกชั้นก่อนเปิด Modal สรุปยอด
+    if (eventData?.event_type === 'closed') {
+      triggerError('ขออภัยครับ ทางร้านหยุดให้บริการในวันที่ท่านเลือก'); 
+      return;
+    }
 
-    // ข้อมูลครบถ้วน เปิด Modal ยืนยันข้อมูล
+    setCurrentEventPrice(eventData?.price || 0);
     setShowConfirmModal(true);
   };
 
-  // 🟢 STEP 2: เมื่อลูกค้ายืนยันข้อมูลแล้ว บันทึกลงฐานข้อมูลจริง
+  const calculatedTotalAmount = currentEventPrice * (selectedTables.length || 1); 
+
   const executeBooking = async () => {
-    setShowConfirmModal(false); // ปิดหน้าต่างยืนยัน
-    setLoading(true); // เริ่มกระบวนการโหลด
+    const isPaymentRequired = calculatedTotalAmount > 0;
+    if (isPaymentRequired && !slipFile) { triggerError('กรุณาแนบรูปสลิปการโอนเงินเพื่อยืนยันการจองครับ'); return; }
+
+    setLoading(true); 
 
     try {
-      const eventData = eventsMap[bookingDate];
-      const isConcertDay = eventData?.event_type === 'concert';
-      const statusToSet = (isConcertDay && bookingDate >= ENFORCE_CHECK_DATE) ? 'pending' : 'confirmed';
+      let slipUrl = null;
+      if (isPaymentRequired && slipFile) { slipUrl = await uploadSlipToSupabase(slipFile); }
+
+      const statusToSet = isPaymentRequired ? 'pending' : 'confirmed'; 
       const randomCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
 
       const newBookings = selectedTables.map(table => ({
@@ -231,7 +239,8 @@ export default function BookingPage() {
         booking_time: `${bookingTime}:00`, 
         guests_count: guestsCount, 
         table_number: table,
-        status: statusToSet, 
+        status: statusToSet,
+        slip_url: slipUrl 
       }));
 
       const { data, error } = await supabase.from('restaurant_bookings').insert(newBookings).select();
@@ -239,39 +248,17 @@ export default function BookingPage() {
       if (error) {
         if (error.code === '23505') { 
           triggerError('มีการซ้อนทับของคิวจอง กรุณาเลือกโต๊ะอื่นแทนนะครับ');
-          fetchTodayBookings(bookingDate); setSelectedTables([]); return;
+          fetchTodayBookings(bookingDate); setSelectedTables([]); setShowConfirmModal(false); return;
         }
         throw error;
       }
 
       if (data && data.length > 0) {
         setSuccessData(data as unknown as BookingRecord[]);
-        
-        try {
-          await fetch('/api/booking-notification', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event: 'NEW_BOOKING',
-              bookingCode: randomCode, 
-              customerName: customerName,
-              phone: phone,
-              tableNumber: selectedTables.join(', '), 
-              date: bookingDate,
-              time: `${bookingTime} น.`, 
-              guests: guestsCount,
-              status: statusToSet
-            })
-          });
-        } catch (lineErr) { console.error('LINE notification failed:', lineErr); }
-
-        setShowModal(true); // เปิดหน้าจอสำเร็จ (แสดง QR)
+        setShowConfirmModal(false); 
+        setShowModal(true); 
       }
-    } catch (err) {
-      console.error(err); triggerError('ระบบเชื่อมโยงข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง');
-    } finally { 
-      setLoading(false); 
-    }
+    } catch (err) { console.error(err); triggerError('ระบบเชื่อมโยงข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง'); } finally { setLoading(false); }
   };
 
   const handleDownloadPDF = () => {
@@ -303,11 +290,7 @@ export default function BookingPage() {
       { label: 'เวลาล็อกโต๊ะ :', value: `${bookingInfo.booking_time.slice(0, 5)} น.` }, 
       { label: 'จำนวนสมาชิก :', value: `${bookingInfo.guests_count} ท่าน (ขั้นต่ำ 4 ท่าน)` }
     ];
-    items.forEach(item => {
-      ctx.fillStyle = '#9E9EAF'; ctx.fillText(item.label, leftCol, currentY);
-      ctx.fillStyle = '#FFFFFF'; ctx.fillText(item.value, rightCol, currentY);
-      currentY += spacing;
-    });
+    items.forEach(item => { ctx.fillStyle = '#9E9EAF'; ctx.fillText(item.label, leftCol, currentY); ctx.fillStyle = '#FFFFFF'; ctx.fillText(item.value, rightCol, currentY); currentY += spacing; });
     ctx.strokeStyle = '#2D2235'; ctx.beginPath(); ctx.moveTo(40, 520); ctx.lineTo(410, 520); ctx.stroke();
     ctx.textAlign = 'center'; ctx.fillStyle = '#FF1F88'; ctx.font = `bold 12px ${ThaiFont}`;
     ctx.fillText('ASSIGNED STATION TABLE', 225, 555);
@@ -321,17 +304,12 @@ export default function BookingPage() {
   };
 
   const resetForm = () => {
-    setShowModal(false);
-    setCustomerName('');
-    setPhone('');
-    setSelectedTables([]);
+    setShowModal(false); setCustomerName(''); setPhone(''); setSelectedTables([]); setSlipFile(null); 
     if (bookingDate) fetchTodayBookings(bookingDate);
   };
 
   if (!shopExists) { return notFound(); }
-
   const isPendingPayment = successData?.[0]?.status === 'pending';
-  const calculatedTotalAmount = currentEventPrice * (successData?.length || 1); 
 
   return (
     <div className="min-h-screen w-full font-sans flex items-center justify-center p-4 relative overflow-hidden transition-colors duration-300 select-none" style={{ backgroundColor: THEME.bg, color: THEME.text }}>
@@ -381,15 +359,7 @@ export default function BookingPage() {
                     <Calendar size={15} /> 1. เลือกวันที่ต้องการจอง
                   </label>
                   <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-300 focus-within:border-amber-400" style={{ borderColor: THEME.border, boxShadow: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? `0 0 15px ${THEME.pink}40` : 'none' }}>
-                    <input 
-                      type="date" 
-                      required 
-                      min={todayStr} 
-                      max={maxDateStr}
-                      value={bookingDate} 
-                      onChange={handleDateSelection} 
-                      className="w-full h-full appearance-none bg-transparent px-4 text-white outline-none text-base color-scheme-dark block min-w-0 box-border iOS-date-input" 
-                    />
+                    <input type="date" required min={todayStr} max={maxDateStr} value={bookingDate} onChange={handleDateSelection} className="w-full h-full appearance-none bg-transparent px-4 text-white outline-none text-base color-scheme-dark block min-w-0 box-border iOS-date-input" />
                   </div>
                   <AnimatePresence>
                     {bookingDate && eventsMap[bookingDate]?.event_type === 'concert' && (
@@ -403,50 +373,25 @@ export default function BookingPage() {
 
               {!bookingDate ? (
                 <div className="mt-4 p-5 sm:p-6 bg-[#0D1424] border border-[#1E293B] rounded-2xl space-y-5 shadow-lg w-full">
-                  <div className="space-y-3">
-                    <h4 className="text-cyan-400 font-bold text-base text-center tracking-wide">เงื่อนไขการจองโต๊ะ</h4>
-                    <ul className="text-slate-300 space-y-2 text-sm">
-                      <li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> 1 โต๊ะ สามารถอยู่ได้ขั้นต่ำ 4 ท่าน</li>
-                      <li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> สามารถจองล่วงหน้าได้ 15 วัน</li>
-                      <li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> ปิดรับจองโต๊ะเวลา 19:00 น. ของทุกวัน</li>
-                    </ul>
-                  </div>
+                  <div className="space-y-3"><h4 className="text-cyan-400 font-bold text-base text-center tracking-wide">เงื่อนไขการจองโต๊ะ</h4><ul className="text-slate-300 space-y-2 text-sm"><li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> 1 โต๊ะ สามารถอยู่ได้ขั้นต่ำ 4 ท่าน</li><li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> สามารถจองล่วงหน้าได้ 15 วัน</li><li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> ปิดรับจองโต๊ะเวลา 19:00 น. ของทุกวัน</li></ul></div>
                   <div className="w-full h-px bg-[#1E293B]"></div>
-                  <div className="space-y-3">
-                    <h4 className="text-purple-400 font-bold text-base text-center tracking-wide">เงื่อนไขการปล่อยโต๊ะ</h4>
-                    <ul className="text-slate-300 space-y-2 text-sm">
-                      <li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> กรุณามารับโต๊ะภายในเวลาที่ท่านเลือกจองไว้</li>
-                      <li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> อาทิตย์-พฤหัสบดี มารับโต๊ะก่อน 21:00 น.</li>
-                      <li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> ศุกร์-เสาร์ รับโต๊ะก่อน 20:00 น.</li>
-                      <li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> สำหรับลูกค้าที่ต้องการจองโซน VIP สามารถติดต่อแอดมินโดยตรงได้เลยนะคะ</li>
-                    </ul>
-                  </div>
-                  <div className="mt-4 p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-center">
-                    <p className="text-cyan-400 font-mono text-[11px] sm:text-xs animate-pulse font-semibold">กรุณาเลือกวันที่ด้านบน เพื่อเริ่มทำรายการจอง</p>
-                  </div>
+                  <div className="space-y-3"><h4 className="text-purple-400 font-bold text-base text-center tracking-wide">เงื่อนไขการปล่อยโต๊ะ</h4><ul className="text-slate-300 space-y-2 text-sm"><li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> กรุณามารับโต๊ะภายในเวลาที่ท่านเลือกจองไว้</li><li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> อาทิตย์-พฤหัสบดี มารับโต๊ะก่อน 21:00 น.</li><li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> ศุกร์-เสาร์ รับโต๊ะก่อน 20:00 น.</li><li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> สำหรับลูกค้าที่ต้องการจองโซน VIP สามารถติดต่อแอดมินโดยตรงได้เลยนะคะ</li></ul></div>
+                  <div className="mt-4 p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-center"><p className="text-cyan-400 font-mono text-[11px] sm:text-xs animate-pulse font-semibold">กรุณาเลือกวันที่ด้านบน เพื่อเริ่มทำรายการจอง</p></div>
                 </div>
               ) : (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5 w-full">
                   <div className="space-y-2 w-full">
-                    <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                      <Clock size={15} /> 2. ระบุเวลาเข้าโต๊ะ
-                    </label>
+                    <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Clock size={15} /> 2. ระบุเวลาเข้าโต๊ะ</label>
                     <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
                       <select value={bookingTime} onChange={(e) => setBookingTime(e.target.value)} className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-medium">
-                        <option value="19:00" style={{ backgroundColor: THEME.card }}>19:00 น. </option>
-                        <option value="20:00" style={{ backgroundColor: THEME.card }}>20:00 น. </option>
-                        <option value="21:00" style={{ backgroundColor: THEME.card }}>21:00 น. </option>
-                        <option value="22:00" style={{ backgroundColor: THEME.card }}>22:00 น. </option>
-                        <option value="23:00" style={{ backgroundColor: THEME.card }}>23:00 น.</option>
+                        <option value="19:00" style={{ backgroundColor: THEME.card }}>19:00 น. </option><option value="20:00" style={{ backgroundColor: THEME.card }}>20:00 น. </option><option value="21:00" style={{ backgroundColor: THEME.card }}>21:00 น. </option><option value="22:00" style={{ backgroundColor: THEME.card }}>22:00 น. </option><option value="23:00" style={{ backgroundColor: THEME.card }}>23:00 น.</option>
                       </select>
                       <ChevronDown size={16} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} />
                     </div>
                   </div>
 
                   <div className="space-y-2 w-full">
-                    <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-200 leading-tight">
-                      3. คลิกเลือกตำแหน่งโต๊ะอาหารบนแผนผังร้าน <span className="text-pink-400 text-xs ml-1">(เลือกได้หลายโต๊ะ)</span>
-                    </label>
+                    <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-200 leading-tight">3. คลิกเลือกตำแหน่งโต๊ะอาหารบนแผนผังร้าน <span className="text-pink-400 text-xs ml-1">(เลือกได้หลายโต๊ะ)</span></label>
                     <div className="w-full rounded-2xl bg-black/40 p-1 border box-sizing-border overflow-x-auto relative min-h-[220px] flex items-center justify-center transition-all duration-300" style={{ borderColor: THEME.border }}>
                       <FloorPlan selectedTables={selectedTables} setSelectedTables={setSelectedTables} dayTables={dayTables} />
                     </div>
@@ -484,19 +429,18 @@ export default function BookingPage() {
                   </div>
 
                   {selectedTables.length > 0 && (
-                    <div className="p-3.5 rounded-xl border flex items-center justify-between font-mono text-xs sm:text-sm bg-emerald-500/10 border-emerald-500/30 text-emerald-400 w-full animate-fade-in">
+                    <div className="p-3.5 rounded-xl border flex items-center justify-between font-mono text-xs sm:text-sm bg-emerald-500/10 border-emerald-500/30 text-emerald-400 w-full animate-fade-in mt-2">
                       <span className="flex items-center gap-1.5 font-bold"><CheckCircle2 size={14} /> STATUS: {selectedTables.length} NODES SELECTED</span>
                       <span className="font-bold">คุณเลือก: โต๊ะ {selectedTables.join(', ')}</span>
                     </div>
                   )}
 
                   <button 
-                    type="submit" 
-                    disabled={loading || selectedTables.length === 0} 
+                    type="submit" disabled={loading || selectedTables.length === 0} 
                     className="w-full mt-3 py-4 text-base font-bold tracking-wide rounded-xl transition-all active:scale-[0.98] disabled:opacity-20 disabled:scale-100 flex items-center justify-center gap-1.5 text-black font-sans" 
                     style={{ backgroundColor: THEME.gold, boxShadow: selectedTables.length > 0 ? `0 4px 25px rgba(229, 184, 66, 0.4)` : 'none' }} 
                   >
-                    {loading ? 'PROCESSING VECTOR...' : 'ยืนยันรหัสจองและจัดโต๊ะ'}
+                    ยืนยันรหัสจองและสรุปยอด
                   </button>
                 </motion.div>
               )}
@@ -505,135 +449,100 @@ export default function BookingPage() {
         </div>
       </div>
 
-      {/* ================= 🟢 POP-UP CONFIRMATION SUMMARY (หน้าต่างตรวจสอบข้อมูลก่อนกดจ่ายเงิน) ================= */}
       <AnimatePresence>
         {showConfirmModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/85 backdrop-blur-md" />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="w-full max-w-sm border shadow-2xl relative overflow-hidden rounded-2xl p-6 z-10 bg-[#16161E]"
+              className="w-full max-w-md border shadow-2xl relative rounded-2xl p-6 z-10 bg-[#16161E] max-h-[90vh] overflow-y-auto custom-scrollbar"
               style={{ borderColor: THEME.border }}
             >
-              <div className="text-center mb-5">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                  <ClipboardCheck size={24} />
-                </div>
-                <h3 className="text-lg font-bold text-white tracking-wide">ตรวจสอบข้อมูลการจอง</h3>
-                <p className="text-xs text-gray-400 mt-1">กรุณาตรวจสอบความถูกต้องก่อนกดชำระเงิน</p>
+              <div className="text-center mb-5 mt-2">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"><ClipboardCheck size={24} /></div>
+                <h3 className="text-lg font-bold text-white tracking-wide">สรุปข้อมูลการจอง</h3>
+                <p className="text-xs text-gray-400 mt-1">กรุณาตรวจสอบความถูกต้องและชำระเงินมัดจำ</p>
               </div>
               
-              <div className="bg-black/40 rounded-xl p-4 space-y-3.5 text-sm text-gray-200 border border-white/5 mb-5 shadow-inner">
+              <div className="bg-black/40 rounded-xl p-4 space-y-3.5 text-sm text-gray-200 border border-white/5 shadow-inner">
                 <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">ชื่อผู้จอง:</span> <span className="font-bold text-white text-right">{customerName}</span></div>
                 <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เบอร์ติดต่อ:</span> <span className="font-bold text-white text-right">{phone}</span></div>
                 <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">วันที่รับสิทธิ์:</span> <span className="font-bold text-white">{bookingDate}</span></div>
                 <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เวลาล็อกโต๊ะ:</span> <span className="font-bold text-white">{bookingTime} น.</span></div>
                 <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">จำนวนสมาชิก:</span> <span className="font-bold text-white">{guestsCount} ท่าน</span></div>
-                <div className="flex justify-between items-start border-t border-white/5 pt-3 mt-1">
-                  <span className="text-gray-400 text-xs mt-0.5">โต๊ะที่เลือก:</span> 
-                  <span className="font-bold text-emerald-400 text-right w-1/2 break-words">{selectedTables.join(', ')}</span>
-                </div>
+                <div className="flex justify-between items-start border-t border-white/5 pt-3 mt-1"><span className="text-gray-400 text-xs mt-0.5">โต๊ะที่เลือก:</span> <span className="font-bold text-emerald-400 text-right w-1/2 break-words">{selectedTables.join(', ')}</span></div>
                 
-                {eventsMap[bookingDate]?.event_type === 'concert' && (
-                  <div className="flex justify-between items-center border-t border-white/10 pt-3 mt-1 bg-amber-500/5 -mx-4 px-4 pb-1">
-                    <span className="text-amber-500/80 text-xs font-bold">ยอดชำระมัดจำล่วงหน้า:</span> 
-                    <span className="font-black text-amber-400 text-lg">{(currentEventPrice * selectedTables.length).toLocaleString()} ฿</span>
-                  </div>
+                {calculatedTotalAmount > 0 && (
+                  <div className="flex justify-between items-center border-t border-white/10 pt-3 mt-1 bg-amber-500/5 -mx-4 px-4 pb-1"><span className="text-amber-500/80 text-xs font-bold">ยอดที่ต้องชำระ:</span> <span className="font-black text-amber-400 text-lg">{calculatedTotalAmount.toLocaleString()} ฿</span></div>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <button 
-                  type="button" onClick={() => setShowConfirmModal(false)}
-                  className="py-3 rounded-xl text-sm font-bold text-gray-400 hover:text-white bg-black/40 hover:bg-white/10 transition-colors border border-white/5"
-                >
-                  กลับไปแก้ไข
-                </button>
-                <button 
-                  type="button" onClick={executeBooking}
-                  className="py-3 rounded-xl text-sm font-bold text-black bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95"
-                >
-                  ยืนยันการจอง
-                </button>
+              {calculatedTotalAmount > 0 && (
+                <div className="mt-5 border border-amber-500/20 bg-amber-500/5 rounded-xl p-5 flex flex-col items-center space-y-5">
+                  <div className="text-center w-full">
+                    <div className="w-full flex items-center justify-between text-[10px] font-black text-blue-400 font-sans tracking-wide pb-2 mb-3 border-b border-amber-500/20"><span>PROMPTPAY QR</span><span>สแกนเพื่อชำระเงิน</span></div>
+                    <div className="bg-white p-2 rounded-xl inline-block shadow-lg mx-auto"><img src={`https://promptpay.io/${SHOP_PROMPTPAY_ID}/${calculatedTotalAmount}.png`} alt="PromptPay QR" className="w-36 h-36 object-contain" /></div>
+                    <p className="text-xs text-slate-300 mt-3">ยอดโอนสุทธิ: <span className="text-amber-400 font-bold text-base">{calculatedTotalAmount.toLocaleString()} บาท</span></p>
+                  </div>
+                  <div className="w-full pt-2 border-t border-amber-500/10">
+                    <label className="font-semibold text-xs flex items-center justify-center gap-1.5 text-gray-300 mb-2"><UploadCloud size={14} className="text-pink-500" /> อัปโหลดสลิปโอนเงิน <span className="text-[10px] text-pink-400">(จำเป็น)</span></label>
+                    <label className={`w-full h-24 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${slipFile ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 bg-black/40 hover:border-pink-500/50'}`}>
+                      {slipFile ? (<div className="text-center text-emerald-400 w-full px-4"><CheckCircle2 size={24} className="mx-auto mb-1" /><span className="text-xs font-bold">แนบไฟล์เรียบร้อย<br/><span className="text-[10px] text-emerald-500/70 truncate block">{slipFile.name}</span></span></div>) : (<div className="text-center text-gray-500 hover:text-gray-300"><ImageIcon size={24} className="mx-auto mb-1" /><span className="text-[11px] font-bold">แตะเพื่ออัปโหลดรูปภาพสลิป</span></div>)}
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files && setSlipFile(e.target.files[0])} />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 mt-6">
+                <button type="button" onClick={() => setShowConfirmModal(false)} className="py-3 rounded-xl text-sm font-bold text-gray-400 hover:text-white bg-black/40 hover:bg-white/10 transition-colors border border-white/5">กลับไปแก้ไข</button>
+                <button type="button" onClick={executeBooking} disabled={loading || (calculatedTotalAmount > 0 && !slipFile)} className="py-3 rounded-xl text-sm font-bold text-black bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95 disabled:opacity-50 disabled:grayscale">{loading ? 'กำลังส่งข้อมูล...' : calculatedTotalAmount > 0 ? 'ยืนยันและส่งสลิป' : 'ยืนยันการจอง'}</button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* ================= 🟢 POP-UP CONCERT LIST ================= */}
+      {/* POP-UP CONCERT LIST */}
       <AnimatePresence>
         {showConcertListModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowConcertListModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-md h-[80vh] flex flex-col relative overflow-hidden rounded-3xl z-10 shadow-2xl bg-[#16161E] border border-[#2D2235]"
-            >
-              <div className="flex items-center justify-between p-5 border-b border-white/5 bg-black/20">
-                <h2 className="text-lg font-bold text-white flex items-center gap-2"><Music className="text-pink-500"/> ตารางคอนเสิร์ต / ปาร์ตี้</h2>
-                <button onClick={() => setShowConcertListModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10"><X size={20}/></button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className="w-full max-w-md h-[80vh] flex flex-col relative overflow-hidden rounded-3xl z-10 shadow-2xl bg-[#16161E] border border-[#2D2235]">
+              <div className="flex items-center justify-between p-5 border-b border-white/5 bg-black/20"><h2 className="text-lg font-bold text-white flex items-center gap-2"><Music className="text-pink-500"/> ตารางคอนเสิร์ต / ปาร์ตี้</h2><button onClick={() => setShowConcertListModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10"><X size={20}/></button></div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
                 {upcomingConcerts.length > 0 ? upcomingConcerts.map((concert) => (
                   <div key={concert.id} className="bg-black/40 border border-slate-800 rounded-2xl overflow-hidden flex flex-col group hover:border-pink-500/50 transition-colors">
                     {concert.image_url && <div className="w-full relative overflow-hidden border-b border-white/5 bg-black"><img src={concert.image_url} alt={concert.title} className="w-full h-auto object-cover hover:scale-105 transition-transform duration-300" /></div>}
-                    <div className="p-4 space-y-2">
-                      <div className="flex justify-between items-start"><h3 className="font-bold text-white text-lg leading-tight">{concert.title}</h3><span className="text-xs bg-pink-500/20 text-pink-400 px-2 py-1 rounded-md font-bold whitespace-nowrap ml-2">{concert.event_date}</span></div>
-                      <p className="text-amber-400 font-bold text-sm">บัตรเหมาต่อโต๊ะ: {concert.price.toLocaleString()} THB</p>
-                      {concert.perks_note && (
-                        <div className="pt-2 mt-2 border-t border-white/5">
-                          <p className="text-[11px] text-slate-400 font-bold mb-1">หมายเหตุและเงื่อนไข:</p>
-                          <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{concert.perks_note}</p>
-                        </div>
-                      )}
-                      <button onClick={() => { setBookingDate(concert.event_date); setShowConcertListModal(false); }} className="w-full mt-3 py-2.5 bg-white/5 hover:bg-pink-500 hover:text-white text-slate-300 rounded-xl text-sm font-bold transition-all border border-slate-700 hover:border-pink-500">เลือกคอนเสิร์ตนี้</button>
-                    </div>
+                    <div className="p-4 space-y-2"><div className="flex justify-between items-start"><h3 className="font-bold text-white text-lg leading-tight">{concert.title}</h3><span className="text-xs bg-pink-500/20 text-pink-400 px-2 py-1 rounded-md font-bold whitespace-nowrap ml-2">{concert.event_date}</span></div><p className="text-amber-400 font-bold text-sm">บัตรเหมาต่อโต๊ะ: {concert.price.toLocaleString()} THB</p>{concert.perks_note && (<div className="pt-2 mt-2 border-t border-white/5"><p className="text-[11px] text-slate-400 font-bold mb-1">หมายเหตุและเงื่อนไข:</p><p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{concert.perks_note}</p></div>)}<button onClick={() => { setBookingDate(concert.event_date); setShowConcertListModal(false); }} className="w-full mt-3 py-2.5 bg-white/5 hover:bg-pink-500 hover:text-white text-slate-300 rounded-xl text-sm font-bold transition-all border border-slate-700 hover:border-pink-500">เลือกคอนเสิร์ตนี้</button></div>
                   </div>
-                )) : (
-                  <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2"><Music size={32} className="opacity-20" /><p>ยังไม่มีคิวงานคอนเสิร์ตในขณะนี้</p></div>
-                )}
+                )) : (<div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2"><Music size={32} className="opacity-20" /><p>ยังไม่มีคิวงานคอนเสิร์ตในขณะนี้</p></div>)}
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* ================= 🟢 POP-UP CONCERT ================= */}
+      {/* POP-UP CONCERT */}
       <AnimatePresence>
         {showConcertModal && concertEvent && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setShowConcertModal(false); setBookingDate(''); }} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-sm min-h-[500px] relative overflow-hidden rounded-[2rem] z-10 flex flex-col justify-end shadow-2xl" style={{ backgroundColor: THEME.card }}
-            >
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className="w-full max-w-sm min-h-[500px] relative overflow-hidden rounded-[2rem] z-10 flex flex-col justify-end shadow-2xl" style={{ backgroundColor: THEME.card }}>
               <button onClick={() => { setShowConcertModal(false); setBookingDate(''); }} className="absolute right-4 top-4 p-2 rounded-full bg-black/40 backdrop-blur-md text-white hover:bg-black/60 z-20 transition-colors"><X size={18} /></button>
               {concertEvent.image_url && <img src={concertEvent.image_url} alt="Concert Poster" className="absolute inset-0 w-full h-full object-cover z-0" />}
               <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0E] via-[#0A0A0E]/80 to-transparent z-0 pointer-events-none" />
-              <div className="relative z-10 p-6 flex flex-col items-center text-center w-full mt-auto">
-                 <h2 className="text-sm font-black text-white bg-black/40 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full mb-2">{concertEvent.event_date}</h2>
-                 <h3 className="text-3xl font-black text-white mb-4 drop-shadow-lg">{concertEvent.title || 'Concert Event'}</h3>
-                 <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-3xl p-5 w-full text-sm font-bold shadow-xl whitespace-pre-line leading-relaxed">
-                    {concertEvent.perks_note || `โปรโมชั่นสำหรับวันนี้จองขั้นต่ำ 2 โต๊ะ\nเตรียมพร้อมมาสนุกสุดเหวี่ยง\nไปพร้อมกับสาวๆ ทั้ง 5 คนได้เลย\nราคาต่อโต๊ะ ${concertEvent.price} ฿`}
-                 </div>
-                 <p className="text-xs text-amber-400 mt-4 font-bold animate-pulse drop-shadow-md">คลิกด้านล่างเพื่อทำการจอง</p>
-                 <button onClick={() => setShowConcertModal(false)} className="mt-3 w-[80%] py-3.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black rounded-full shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-transform active:scale-95">จองโต๊ะ</button>
-              </div>
+              <div className="relative z-10 p-6 flex flex-col items-center text-center w-full mt-auto"><h2 className="text-sm font-black text-white bg-black/40 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full mb-2">{concertEvent.event_date}</h2><h3 className="text-3xl font-black text-white mb-4 drop-shadow-lg">{concertEvent.title || 'Concert Event'}</h3><div className="bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-3xl p-5 w-full text-sm font-bold shadow-xl whitespace-pre-line leading-relaxed">{concertEvent.perks_note || `โปรโมชั่นสำหรับวันนี้จองขั้นต่ำ 2 โต๊ะ\nเตรียมพร้อมมาสนุกสุดเหวี่ยง\nไปพร้อมกับสาวๆ ทั้ง 5 คนได้เลย\nราคาต่อโต๊ะ ${concertEvent.price} ฿`}</div><p className="text-xs text-amber-400 mt-4 font-bold animate-pulse drop-shadow-md">คลิกด้านล่างเพื่อทำการจอง</p><button onClick={() => setShowConcertModal(false)} className="mt-3 w-[80%] py-3.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black rounded-full shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-transform active:scale-95">จองโต๊ะ</button></div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* ================= 🟢 POP-UP ERROR MODAL ================= */}
       <AnimatePresence>
         {showErrorModal && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowErrorModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.92, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 15 }}
-              className="w-full max-w-sm border shadow-2xl relative overflow-hidden rounded-2xl p-6 text-center z-10" style={{ backgroundColor: THEME.card, borderColor: `${THEME.pink}50` }}
-            >
+            <motion.div initial={{ opacity: 0, scale: 0.92, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 15 }} className="w-full max-w-sm border shadow-2xl relative overflow-hidden rounded-2xl p-6 text-center z-10" style={{ backgroundColor: THEME.card, borderColor: `${THEME.pink}50` }}>
               <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-red-500/10 border border-red-500/30 text-red-400"><AlertTriangle size={24} className="animate-bounce" /></div>
               <h3 className="text-base font-extrabold text-white tracking-wide">ระบบตรวจพบข้อขัดข้อง</h3>
               <p className="text-xs text-gray-400 leading-relaxed mt-2 px-1">{errorMessage}</p>
@@ -643,50 +552,28 @@ export default function BookingPage() {
         )}
       </AnimatePresence>
 
-      {/* ================= 🟢 SUCCESS TICKET POP-UP MODAL ================= */}
       <AnimatePresence>
         {showModal && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 overflow-y-auto">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={resetForm} className="fixed inset-0 bg-black/80 backdrop-blur-md" />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="w-full max-w-md border shadow-2xl relative overflow-hidden rounded-2xl z-10 my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
-            >
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="w-full max-w-md border shadow-2xl relative overflow-hidden rounded-2xl z-10 my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
               <div className="absolute w-4 h-8 border border-l-0 rounded-r-full top-1/2 -left-0.5 -translate-y-1/2" style={{ backgroundColor: THEME.bg, borderColor: THEME.border }} />
               <div className="absolute w-4 h-8 border border-r-0 rounded-l-full top-1/2 -right-0.5 -translate-y-1/2" style={{ backgroundColor: THEME.bg, borderColor: THEME.border }} />
               <button onClick={resetForm} className="absolute right-4 top-4 p-1.5 rounded-lg bg-black/20 text-gray-400 hover:text-white"><X size={16} /></button>
 
               <div className="p-6 md:p-8 space-y-5">
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-2 mt-2">
                   <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto border-2 ${isPendingPayment ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 animate-pulse' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>
-                    {isPendingPayment ? <QrCode size={26} /> : <CheckCircle2 size={26} />}
+                    <CheckCircle2 size={26} />
                   </div>
                   <div>
-                    <p className={`text-[10px] font-mono tracking-widest uppercase font-bold ${isPendingPayment ? 'text-amber-400' : 'text-emerald-400'}`}>{isPendingPayment ? 'PROMPTPAY SCAN ACTIVE' : 'RESERVATION SECURED'}</p>
-                    <h2 className="text-xl md:text-2xl font-black text-white mt-1">{isPendingPayment ? 'สแกนคิวอาร์โค้ดชำระเงิน' : 'ล็อกที่นั่งสำเร็จเรียบร้อย'}</h2>
+                    <p className={`text-[10px] font-mono tracking-widest uppercase font-bold ${isPendingPayment ? 'text-amber-400' : 'text-emerald-400'}`}>{isPendingPayment ? 'UPLOAD COMPLETED' : 'RESERVATION SECURED'}</p>
+                    <h2 className="text-xl md:text-2xl font-black text-white mt-1">{isPendingPayment ? 'ส่งหลักฐานให้แอดมินแล้ว' : 'ล็อกที่นั่งสำเร็จเรียบร้อย'}</h2>
                   </div>
                 </div>
 
-                {isPendingPayment && (
-                  <div className="flex flex-col items-center justify-center space-y-2 bg-white p-4 rounded-xl mx-auto w-56 border-2 border-amber-500/20">
-                    <div className="w-full flex items-center justify-between text-[9px] font-black text-blue-900 font-sans tracking-wide pb-1.5 border-b border-gray-100"><span>PROMPTPAY Dynamic QR</span><span className="text-blue-600">พร้อมเพย์</span></div>
-                    <div className="w-40 h-40 bg-gray-50 flex items-center justify-center relative rounded-md p-1">
-                      <img src={`https://promptpay.io/${SHOP_PROMPTPAY_ID}/${calculatedTotalAmount}.png`} alt="PromptPay QR" className="w-full h-full object-contain mix-blend-multiply" />
-                    </div>
-                    <div className="text-center font-sans">
-                      <p className="text-[9px] font-bold text-gray-400 uppercase leading-none">Net Amount <span className="text-[8px] text-pink-500 ml-1">({successData?.length} โต๊ะ)</span></p>
-                      <p className="text-xl font-black text-slate-900 mt-1">{calculatedTotalAmount.toLocaleString()} <span className="text-xs font-semibold text-slate-600">บาท</span></p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-black/30 border border-dashed rounded-xl p-4 space-y-2.5 text-xs font-mono" style={{ borderColor: THEME.border }}>
-                  <div className="flex justify-between border-b pb-2" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                    <span className="text-gray-400">BOOKING CODE</span>
-                    <span className="font-bold text-sm" style={{ color: THEME.gold }}>
-                      {(successData?.[0]?.booking_code?.split('-')?.length ?? 0) > 2 ? successData?.[0]?.booking_code?.split('-')?.slice(0, 2)?.join('-') : successData?.[0]?.booking_code}
-                    </span>
-                  </div>
+                <div className="bg-black/30 border border-dashed rounded-xl p-4 space-y-2.5 text-xs font-mono mt-4" style={{ borderColor: THEME.border }}>
+                  <div className="flex justify-between border-b pb-2" style={{ borderColor: 'rgba(255,255,255,0.05)' }}><span className="text-gray-400">BOOKING CODE</span><span className="font-bold text-sm" style={{ color: THEME.gold }}>{(successData?.[0]?.booking_code?.split('-')?.length ?? 0) > 2 ? successData?.[0]?.booking_code?.split('-')?.slice(0, 2)?.join('-') : successData?.[0]?.booking_code}</span></div>
                   <div className="flex justify-between"><span className="text-gray-400">TABLE STATION</span><span className="font-bold text-white text-right max-w-[160px] break-words">{successData?.map(b => b.table_number).join(', ')}</span></div>
                   <div className="flex justify-between"><span className="text-gray-400">DATE</span><span className="font-sans text-gray-200">{successData?.[0]?.booking_date}</span></div>
                   <div className="flex justify-between"><span className="text-gray-400">ARRIVAL TIME</span><span className="font-sans text-gray-200">{successData?.[0]?.booking_time?.slice(0, 5)} น.</span></div>
@@ -694,17 +581,16 @@ export default function BookingPage() {
                 </div>
 
                 {isPendingPayment && (
-                  <div className="p-3 bg-black/20 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1 font-sans leading-relaxed">
-                    <p className="text-gray-200 font-bold flex items-center gap-1.5"><ArrowRight size={12} className="text-pink-500" /> คำแนะนำหลังโอนเงิน:</p>
-                    <p>1. สแกนคิวอาร์โค้ดชำระเงินตามยอดด้านบน</p>
-                    <p>2. ดาวน์โหลดใบยืนยันคิว PDF เก็บไว้เป็นหลักฐาน</p>
-                    <p className="text-pink-400 font-semibold">3. ส่งหลักฐานทั้งหมดไปที่ LINE OA เพื่อให้แอดมินยืนยันล็อกโต๊ะครับ</p>
+                  <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-[11px] text-slate-300 space-y-1 font-sans leading-relaxed text-center">
+                    <p className="text-amber-400 font-bold mb-1">สถานะ: รอแอดมินตรวจสอบสลิป</p>
+                    <p>ดาวน์โหลดตั๋วคิว PDF ด้านล่างเก็บไว้เป็นหลักฐาน</p>
+                    <p>ระบบจะยืนยันคิวให้สมบูรณ์หลังจากการตรวจสอบเสร็จสิ้น</p>
                   </div>
                 )}
 
                 <div className="space-y-2 pt-1 text-xs">
-                  <button onClick={handleDownloadPDF} className="w-full py-3 bg-emerald-500 text-[#121318] font-black rounded-xl flex items-center justify-center gap-1.5 shadow-md hover:bg-emerald-400 transition-all"><Download size={14} /> ดาวน์โหลดใบยืนยันคิว PDF</button>
-                  <button onClick={resetForm} className="w-full py-2.5 border bg-transparent hover:bg-white/5 rounded-xl text-gray-400 transition-colors" style={{ borderColor: THEME.border }}>ออกและกลับไปหน้าหลัก</button>
+                  <button onClick={handleDownloadPDF} className="w-full py-3 bg-emerald-500 text-[#121318] font-black rounded-xl flex items-center justify-center gap-1.5 shadow-md hover:bg-emerald-400 transition-all"><Download size={14} /> ดาวน์โหลดตั๋วคิว PDF</button>
+                  <button onClick={resetForm} className="w-full py-2.5 border bg-transparent hover:bg-white/5 rounded-xl text-gray-400 transition-colors" style={{ borderColor: THEME.border }}>ปิดและกลับไปหน้าหลัก</button>
                 </div>
               </div>
             </motion.div>
@@ -717,6 +603,9 @@ export default function BookingPage() {
         .box-sizing-border { box-sizing: border-box; }
         input[type="date"]::-webkit-date-and-time-value { color: #F1F1F5 !important; text-align: left; display: flex; align-items: center; min-height: 100% !important; height: 100% !important; padding: 0 !important; margin: 0 !important; }
         input[type="date"] { appearance: none !important; -webkit-appearance: none !important; color-scheme: dark !important; color: #F1F1F5 !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.1); border-radius: 10px; }
       `}</style>
     </div>
   );

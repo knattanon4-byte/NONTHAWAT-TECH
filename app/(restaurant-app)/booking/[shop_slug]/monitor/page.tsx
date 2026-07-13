@@ -6,67 +6,28 @@ import { supabase } from '@/lib/supabase/client';
 import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'framer-motion'; 
 import {
-  Search,
-  Filter,
-  Users,
-  Clock,
-  Phone,
-  Hash,
-  CalendarDays,
-  Crown,
-  Trees,
-  Music,
-  Inbox,
-  CircleDot,
-  ChevronDown,
-  AlertTriangle,
-  Check,
-  X,
-  History,
-  Radio,
-  Download,
-  Coins,
-  Loader2,
-  FileText,
-  Image as ImageIcon,
-  CheckCircle,
-  DollarSign,    
-  AlertCircle,   
+  Search, Filter, Users, Clock, Phone, Hash, CalendarDays, Crown, Trees, Music, Inbox, CircleDot, ChevronDown, AlertTriangle, Check, X, History, Radio, Download, Coins, Loader2, FileText, Image as ImageIcon, CheckCircle, DollarSign,    
+  AlertCircle,    
   Lock,    
   Unlock, 
   Mail,    
   LogOut,  
   LayoutGrid,  
   Map,         
+  Eye,
   type LucideIcon,
 } from 'lucide-react';
 import FloorPlan from '@/components/booking/FloorPlan'; 
 
-/* ----------------------------------------------------------------------------
- * Premium Nightlife Theme tokens
- * -------------------------------------------------------------------------- */
 const THEME = {
-  bg: '#0A0A0E',
-  card: '#16161E',
-  border: '#2D2235',
-  pink: '#FF1F88',
-  gold: '#E5B842',
-  purple: '#8A3FFC',
-  mint: '#00F5D4',
-  amber: '#FBBC05',
-  text: '#F1F1F5',
-  muted: '#9E9EAF',
+  bg: '#0A0A0E', card: '#16161E', border: '#2D2235', pink: '#FF1F88',
+  gold: '#E5B842', purple: '#8A3FFC', mint: '#00F5D4', amber: '#FBBC05',
+  text: '#F1F1F5', muted: '#9E9EAF',
 };
 
 type ZoneId = 'ALL' | 'V' | 'G' | 'A';
 
-interface ZoneMeta {
-  id: ZoneId;
-  label: string;
-  prefix: string;
-  icon: LucideIcon;
-  accent: string;
-}
+interface ZoneMeta { id: ZoneId; label: string; prefix: string; icon: LucideIcon; accent: string; }
 
 const ZONES: ZoneMeta[] = [
   { id: 'ALL', label: 'All Zones', prefix: '', icon: Filter, accent: THEME.muted },
@@ -85,13 +46,10 @@ type LiveStatus = 'tonight' | 'upcoming' | 'past';
 function deriveStatus(b: any): LiveStatus {
   const rawTime = b.booking_time || '00:00:00';
   const timePart = rawTime.includes('-') ? rawTime.split('-')[0].trim() : rawTime.slice(0, 5);
-
   const stamp = new Date(`${b.booking_date}T${timePart}:00`);
   if (Number.isNaN(stamp.getTime())) return 'upcoming';
-
   const now = new Date();
   const today = now.toISOString().split('T')[0];
-
   if (b.booking_date === today) {
     return stamp.getTime() + 90 * 60 * 1000 < now.getTime() ? 'past' : 'tonight';
   }
@@ -116,7 +74,6 @@ export default function MonitorPage() {
     return shopSlug.split('-').map((w) => w.toUpperCase()).join(' ');
   }, [shopSlug]);
 
-  // 🔐 Authentication States
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState('');
@@ -124,9 +81,7 @@ export default function MonitorPage() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Dashboard Main States
   const [bookings, setBookings] = useState<any[]>([]);
-  // 🟢 เก็บข้อมูล Event ทั้งก้อนเลย จะได้ดึงมาโชว์ในฟอร์มได้
   const [eventsMap, setEventsMap] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -137,32 +92,23 @@ export default function MonitorPage() {
   const [isBookingOpen, setIsBookingOpen] = useState(true);
   const [shopExists, setShopExists] = useState(true);
 
-  // คอนโทรลอินเทอร์เฟซ
   const [viewMode, setViewMode] = useState<'list' | 'floorplan'>('list');
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const [adminSelectedDate, setAdminSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [selectedBookingForSlip, setSelectedBookingForSlip] = useState<any>(null);
 
-  // คอนโทรลสำหรับ Custom ล็อกโต๊ะแอดมิน 
   const [isLockConfirmModalOpen, setIsLockConfirmModalOpen] = useState(false);
   const [tablePendingLock, setTablePendingLock] = useState<string | null>(null);
   const [isLockProcessing, setIsLockProcessing] = useState(false);
   const [lockModalMode, setLockModalMode] = useState<'lock' | 'unlock'>('lock');
 
-  // 🟢 คอนโทรลระบบแจ้งเตือน Custom Premium Pop-up
-  const [appNotice, setAppNotice] = useState<{
-    isOpen: boolean;
-    type: 'success' | 'error' | 'info';
-    title: string;
-    message: string;
-  }>({ isOpen: false, type: 'info', title: '', message: '' });
+  const [appNotice, setAppNotice] = useState<{ isOpen: boolean; type: 'success' | 'error' | 'info'; title: string; message: string; }>({ isOpen: false, type: 'info', title: '', message: '' });
 
   const triggerNotice = (type: 'success' | 'error' | 'info', title: string, message: string) => {
     setAppNotice({ isOpen: true, type, title, message });
   };
 
-  // Modals อื่นๆ
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportForm, setReportForm] = useState({ issueType: 'ระบบจองขัดข้อง', details: '' });
   const [isSendingReport, setIsSendingReport] = useState(false);
@@ -171,7 +117,8 @@ export default function MonitorPage() {
   const [eventLoading, setEventLoading] = useState(false);
   const [eventStatusMsg, setEventStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [eventDate, setEventDate] = useState('');
-  const [eventType, setEventType] = useState<'normal' | 'concert'>('normal');
+  // 🟢 เพิ่มโหมด closed เข้าไปใน eventType
+  const [eventType, setEventType] = useState<'normal' | 'concert' | 'closed'>('normal');
   const [eventTitle, setEventTitle] = useState('');
   const [eventPrice, setEventPrice] = useState(5000);
   const [perksNote, setPerksNote] = useState('');
@@ -183,34 +130,18 @@ export default function MonitorPage() {
 
   const monthNames = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 
-  // 🔐 Auth Effect
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAuthLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setAuthLoading(false);
-    });
-
+    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); setAuthLoading(false); });
     return () => subscription.unsubscribe();
   }, []);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setAuthError(null);
-
+    e.preventDefault(); setIsLoggingIn(true); setAuthError(null);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-    } catch (err: any) {
-      setAuthError(err.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
-    } finally {
-      setIsLoggingIn(false);
-    }
+    } catch (err: any) { setAuthError(err.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง'); } finally { setIsLoggingIn(false); }
   };
 
   const handleLogoutClick = () => {
@@ -220,14 +151,9 @@ export default function MonitorPage() {
   const calendarDays = useMemo(() => {
     const firstDayIndex = new Date(viewYear, viewMonth, 1).getDay();
     const totalDays = new Date(viewYear, viewMonth + 1, 0).getDate();
-    
     const daysArray = [];
-    for (let i = 0; i < firstDayIndex; i++) {
-      daysArray.push(null);
-    }
-    for (let i = 1; i <= totalDays; i++) {
-      daysArray.push(i);
-    }
+    for (let i = 0; i < firstDayIndex; i++) daysArray.push(null);
+    for (let i = 1; i <= totalDays; i++) daysArray.push(i);
     return daysArray;
   }, [viewYear, viewMonth]);
 
@@ -239,24 +165,14 @@ export default function MonitorPage() {
 
   const loadEventsData = useCallback(async () => {
     try {
-      const { data } = await supabase
-        .from('shop_events')
-        .select('*')
-        .eq('shop_id', shopSlug);
-      
+      const { data } = await supabase.from('shop_events').select('*').eq('shop_id', shopSlug);
       if (data) {
-        const mapped = data.reduce((acc, curr: any) => ({
-          ...acc,
-          [curr.event_date]: curr
-        }), {} as Record<string, any>);
+        const mapped = data.reduce((acc, curr: any) => ({ ...acc, [curr.event_date]: curr }), {} as Record<string, any>);
         setEventsMap(mapped);
       }
-    } catch (err) {
-      console.error('Failed to load shop events mapping:', err);
-    }
+    } catch (err) { console.error('Failed to load shop events mapping:', err); }
   }, [shopSlug]);
 
-  // 🟢 ดึงข้อมูลมาโชว์ในฟอร์มทันทีเมื่อคลิกเลือกวันที่บนปฏิทิน
   useEffect(() => {
     if (eventDate && eventsMap[eventDate]) {
       const ev = eventsMap[eventDate];
@@ -265,9 +181,8 @@ export default function MonitorPage() {
       setEventPrice(ev.price || 0);
       setPerksNote(ev.perks_note || '');
       setImagePreview(ev.image_url || null);
-      setImageFile(null); // เคลียร์รูปใหม่ที่รออัปโหลด
+      setImageFile(null); 
     } else {
-      // ถ้าวันนั้นยังไม่มีงาน ให้ล้างฟอร์ม
       setEventType('normal');
       setEventTitle('');
       setEventPrice(5000);
@@ -279,21 +194,13 @@ export default function MonitorPage() {
 
   useEffect(() => {
     if (!session) return; 
-
     let active = true;
     const loadData = async () => {
       try {
         await loadEventsData();
-        const { data, error: dbError } = await supabase
-          .from('restaurant_bookings')
-          .select('*')
-          .eq('shop_id', shopSlug)
-          .order('booking_date', { ascending: true })
-          .order('booking_time', { ascending: true });
-
+        const { data, error: dbError } = await supabase.from('restaurant_bookings').select('*').eq('shop_id', shopSlug).order('booking_date', { ascending: true }).order('booking_time', { ascending: true });
         if (!active) return;
         if (dbError) throw dbError;
-
         setBookings((data as any[]) ?? []);
         setError(null);
         setLastSync(new Date().toLocaleTimeString('en-GB'));
@@ -301,19 +208,14 @@ export default function MonitorPage() {
         if (!active) return;
         console.error('Monitor fetch failed:', err);
         setError('ไม่สามารถเชื่อมต่อฐานข้อมูลได้ ระบบกำลังพยายามเชื่อมต่อใหม่...');
-      } finally {
-        if (active) setLoading(false);
-      }
+      } finally { if (active) setLoading(false); }
     };
     loadData();
 
-    const channel = supabase
-      .channel(`live-monitor-v7:${shopSlug}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_bookings', filter: `shop_id=eq.${shopSlug}` }, (payload) => {
+    const channel = supabase.channel(`live-monitor-v7:${shopSlug}`).on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_bookings', filter: `shop_id=eq.${shopSlug}` }, (payload) => {
         if (!active) return;
         const newRecord = payload.new as any;
         const oldRecord = payload.old as any;
-
         setBookings((prev) => {
           if (payload.eventType === 'INSERT') {
             const updated = [...prev, newRecord];
@@ -323,322 +225,161 @@ export default function MonitorPage() {
             });
           }
           if (payload.eventType === 'UPDATE') {
+            if (selectedBookingForSlip && selectedBookingForSlip.id === newRecord.id) { setSelectedBookingForSlip((curr: any) => ({ ...curr, ...newRecord })); }
             return prev.map((item) => (item.id === newRecord.id ? { ...item, ...newRecord } : item));
           }
-          if (payload.eventType === 'DELETE') {
-            return prev.filter((item) => item.id === oldRecord.id);
-          }
+          if (payload.eventType === 'DELETE') { return prev.filter((item) => item.id === oldRecord.id); }
           return prev;
         });
         setLastSync(new Date().toLocaleTimeString('en-GB'));
-      })
-      .subscribe();
-
-    return () => {
-      active = false;
-      supabase.removeChannel(channel);
-    };
-  }, [shopSlug, loadEventsData, session]);
+      }).subscribe();
+    return () => { active = false; supabase.removeChannel(channel); };
+  }, [shopSlug, loadEventsData, session, selectedBookingForSlip]);
 
   useEffect(() => {
     let active = true;
     const loadShopSettings = async () => {
       try {
-        const { data, error: settingsError } = await supabase
-          .from('shop_settings')
-          .select('is_booking_open')
-          .eq('shop_id', shopSlug)
-          .single();
-
-        if (settingsError && settingsError.code === 'PGRST116') {
-          if (active) setShopExists(false);
-          return;
-        }
+        const { data, error: settingsError } = await supabase.from('shop_settings').select('is_booking_open').eq('shop_id', shopSlug).single();
+        if (settingsError && settingsError.code === 'PGRST116') { if (active) setShopExists(false); return; }
         if (settingsError) throw settingsError;
         if (active && data) setIsBookingOpen(data.is_booking_open);
-      } catch (err) {
-        console.error(err);
-      }
+      } catch (err) { console.error(err); }
     };
     loadShopSettings();
   }, [shopSlug]);
 
   const handleUpdateStatus = async (bookingId: string, nextStatus: 'confirmed' | 'checked_in' | 'no_show') => {
     try {
-      const { error: patchError } = await supabase
-        .from('restaurant_bookings')
-        .update({ status: nextStatus })
-        .eq('id', bookingId);
+      const { error: patchError } = await supabase.from('restaurant_bookings').update({ status: nextStatus }).eq('id', bookingId);
       if (patchError) throw patchError;
-      
-      if (nextStatus === 'confirmed') {
-        triggerNotice('success', 'ยืนยันรับยอดเงินสำเร็จ', 'ระบบได้ทำการอนุมัติสิทธิ์ล็อกที่นั่ง และส่งคลื่นอัปเดตสถานะเปลี่ยนโต๊ะอาหารเป็นไฟแดงให้ลูกค้าออนไลน์ทุกรายเรียลไทม์เรียบร้อยแล้วครับ');
-      }
-    } catch (err) {
-      console.error(err);
-      triggerNotice('error', 'ระบบทำงานขัดข้อง', 'ไม่สามารถเชื่อมต่อเน็ตเวิร์กเพื่อปรับปรุงสถานะคิวได้ในขณะนี้');
-    }
+      if (nextStatus === 'confirmed') { triggerNotice('success', 'ยืนยันรับยอดเงินสำเร็จ', 'ระบบได้ทำการอนุมัติสิทธิ์ล็อกที่นั่ง และส่งคลื่นอัปเดตสถานะเปลี่ยนโต๊ะอาหารเป็นไฟแดงให้ลูกค้าออนไลน์ทุกรายเรียลไทม์เรียบร้อยแล้วครับ'); } 
+      else if (nextStatus === 'no_show') { triggerNotice('info', 'ปฏิเสธคิวสำเร็จ', 'ระบบได้ทำการปฏิเสธคิวและเคลียร์โต๊ะให้ว่างเรียบร้อยแล้ว'); }
+    } catch (err) { console.error(err); triggerNotice('error', 'ระบบทำงานขัดข้อง', 'ไม่สามารถเชื่อมต่อเน็ตเวิร์กเพื่อปรับปรุงสถานะคิวได้ในขณะนี้'); }
   };
 
   const handleToggleBookingStatus = async (targetState: boolean) => {
-    setIsBookingOpen(targetState);
-    setIsStatusDropdownOpen(false);
-    try {
-      await supabase.from('shop_settings').upsert({ shop_id: shopSlug, is_booking_open: targetState });
-    } catch (err) {
-      console.error(err);
-      triggerNotice('error', 'อัปเดตระบบล้มเหลว', 'ไม่สามารถปรับเปลี่ยนสถานะการเปิดจองของร้านอาหารบนระบบคลาวด์ได้ครับ');
-      setIsBookingOpen(!targetState);
-    }
+    setIsBookingOpen(targetState); setIsStatusDropdownOpen(false);
+    try { await supabase.from('shop_settings').upsert({ shop_id: shopSlug, is_booking_open: targetState }); } 
+    catch (err) { console.error(err); triggerNotice('error', 'อัปเดตระบบล้มเหลว', 'ไม่สามารถปรับเปลี่ยนสถานะการเปิดจองของร้านอาหารบนระบบคลาวด์ได้ครับ'); setIsBookingOpen(!targetState); }
   };
 
   const handleAdminLockTableClick = (tableNum: string) => {
-    const existingBooking = bookings.find(
-      (b) => b.booking_date === adminSelectedDate && b.table_number === tableNum && b.status !== 'no_show'
-    );
-
+    const existingBooking = bookings.find((b) => b.booking_date === adminSelectedDate && b.table_number === tableNum && b.status !== 'no_show');
     if (existingBooking) {
-      if (existingBooking.booking_code?.startsWith('LOCK-')) {
-        setTablePendingLock(tableNum);
-        setLockModalMode('unlock'); 
-        setIsLockConfirmModalOpen(true);
-      } else {
-        triggerNotice('error', 'พื้นที่ถูกจองด้วยสิทธิ์ลูกค้า', `โต๊ะหมายเลข ${tableNum} เป็นคิวชำระเงินของ "คุณ ${existingBooking.customer_name}" ระบบล็อกความปลอดภัยเพื่อป้องกันความสับสนหน้าร้านครับ`);
-      }
+      if (existingBooking.booking_code?.startsWith('LOCK-')) { setTablePendingLock(tableNum); setLockModalMode('unlock'); setIsLockConfirmModalOpen(true); } 
+      else { triggerNotice('error', 'พื้นที่ถูกจองด้วยสิทธิ์ลูกค้า', `โต๊ะหมายเลข ${tableNum} เป็นคิวชำระเงินของ "คุณ ${existingBooking.customer_name}" ระบบล็อกความปลอดภัยเพื่อป้องกันความสับสนหน้าร้านครับ`); }
       return;
     }
-
-    setTablePendingLock(tableNum);
-    setLockModalMode('lock');
-    setIsLockConfirmModalOpen(true); 
+    setTablePendingLock(tableNum); setLockModalMode('lock'); setIsLockConfirmModalOpen(true); 
   };
 
   const executeAdminLockTable = async () => {
     if (!tablePendingLock) return;
     setIsLockProcessing(true);
-
     try {
-      const res = await fetch('/api/admin/lock-table', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopId: shopSlug,
-          tableNumber: tablePendingLock,
-          bookingDate: adminSelectedDate,
-          action: lockModalMode 
-        })
-      });
-
+      const res = await fetch('/api/admin/lock-table', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopId: shopSlug, tableNumber: tablePendingLock, bookingDate: adminSelectedDate, action: lockModalMode }) });
       const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Server เกิดปัญหาสัญญาณขาดหาย');
-      }
-
+      if (!contentType || !contentType.includes('application/json')) throw new Error('Server เกิดปัญหาสัญญาณขาดหาย');
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Server returned error');
-      
-      setIsLockConfirmModalOpen(false);
-      setTablePendingLock(null);
-
-      triggerNotice(
-        'success',
-        lockModalMode === 'lock' ? 'ล็อกพิกัดโต๊ะสำเร็จ' : 'คืนพื้นที่โต๊ะสำเร็จ',
-        lockModalMode === 'lock'
-          ? `ระบบทำการเปลี่ยนโต๊ะหมายเลข ${tablePendingLock} เป็นสถานะสตาฟฟ์แมนนวลบล็อกสิทธิ์ออนไลน์หน้าร้านเรียบร้อย`
-          : `ปลดล็อกโต๊ะหมายเลข ${tablePendingLock} คืนกลับสู่สถานะว่างเพื่อให้ลูกค้าจากทางบ้านแย่งจองได้ตามปกติแล้ว`
-      );
-    } catch (err: any) {
-      console.error(err);
-      triggerNotice('error', 'คำสั่งขัดข้อง', err.message || 'ระบบหลังบ้านพังกระจาย ส่งสัญญาไปตรวจสอบไฟล์จองไม่สำเร็จ');
-    } finally { 
-      setIsLockProcessing(false);
-    }
+      setIsLockConfirmModalOpen(false); setTablePendingLock(null);
+      triggerNotice('success', lockModalMode === 'lock' ? 'ล็อกพิกัดโต๊ะสำเร็จ' : 'คืนพื้นที่โต๊ะสำเร็จ', lockModalMode === 'lock' ? `ระบบทำการเปลี่ยนโต๊ะหมายเลข ${tablePendingLock} เป็นสถานะสตาฟฟ์แมนนวลบล็อกสิทธิ์ออนไลน์หน้าร้านเรียบร้อย` : `ปลดล็อกโต๊ะหมายเลข ${tablePendingLock} คืนกลับสู่สถานะว่างเพื่อให้ลูกค้าจากทางบ้านแย่งจองได้ตามปกติแล้ว`);
+    } catch (err: any) { console.error(err); triggerNotice('error', 'คำสั่งขัดข้อง', err.message || 'ระบบหลังบ้านพังกระจาย ส่งสัญญาไปตรวจสอบไฟล์จองไม่สำเร็จ'); } finally { setIsLockProcessing(false); }
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+      const file = e.target.files[0]; setImageFile(file); setImagePreview(URL.createObjectURL(file));
     }
   };
 
   const handleCreateEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!eventDate) {
-      setEventStatusMsg({ type: 'error', text: 'กรุณาคลิกเลือกวันที่บนแผงปฏิทินก่อนครับ' });
-      return;
-    }
-
-    setEventLoading(true);
-    setEventStatusMsg(null);
-
+    if (!eventDate) { setEventStatusMsg({ type: 'error', text: 'กรุณาคลิกเลือกวันที่บนแผงปฏิทินก่อนครับ' }); return; }
+    setEventLoading(true); setEventStatusMsg(null);
     try {
       let uploadedImageUrl = imagePreview || '';
-
       if (imageFile && eventType === 'concert') {
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `${shopSlug}-${eventDate}-${Math.floor(1000 + Math.random() * 9000)}.${fileExt}`;
         const filePath = `${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('event-posters')
-          .upload(filePath, imageFile, { cacheControl: '3600', upsert: true });
-
+        const { error: uploadError } = await supabase.storage.from('event-posters').upload(filePath, imageFile, { cacheControl: '3600', upsert: true });
         if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from('event-posters')
-          .getPublicUrl(filePath);
-
+        const { data: urlData } = supabase.storage.from('event-posters').getPublicUrl(filePath);
         uploadedImageUrl = urlData.publicUrl;
       }
-
+      
+      // 🟢 อัปเดตข้อมูลตาม eventType (รวม closed เข้าไปด้วย)
       const eventData = {
         shop_id: shopSlug,
         event_date: eventDate,
         event_type: eventType,
-        title: eventType === 'concert' ? eventTitle : 'วันบริการปกติ',
+        title: eventType === 'concert' ? eventTitle : eventType === 'closed' ? 'วันหยุดร้าน' : 'วันบริการปกติ',
         price: eventType === 'concert' ? eventPrice : 0,
-        perks_note: eventType === 'concert' ? perksNote : 'จองฟรี ไม่มีค่าบริการ',
+        perks_note: eventType === 'concert' ? perksNote : eventType === 'closed' ? 'ปิดรับจองออนไลน์ วันหยุดทำการ' : 'จองฟรี ไม่มีค่าบริการ',
         image_url: eventType === 'concert' ? uploadedImageUrl : null,
       };
 
-      const { error: dbError = null } = await supabase
-        .from('shop_events')
-        .upsert([eventData], { onConflict: 'shop_id,event_date' });
-
+      const { error: dbError = null } = await supabase.from('shop_events').upsert([eventData], { onConflict: 'shop_id,event_date' });
       if (dbError) throw dbError;
-
-      setEventStatusMsg({ type: 'success', text: `🎉 ตั้งค่าโหมด ${eventType === 'concert' ? 'วันคอนเสิร์ต' : 'วันปกติ'} เรียบร้อยแล้ว` });
+      setEventStatusMsg({ type: 'success', text: `🎉 ตั้งค่าโหมด ${eventType === 'concert' ? 'วันคอนเสิร์ต' : eventType === 'closed' ? 'วันหยุดร้าน' : 'วันปกติ'} เรียบร้อยแล้ว` });
       await loadEventsData(); 
-
-    } catch (err: any) {
-      console.error(err);
-      setEventStatusMsg({ type: 'error', text: err.message || 'ระบบบันทึกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' });
-    } finally { 
-      setEventLoading(false);
-    }
+    } catch (err: any) { console.error(err); setEventStatusMsg({ type: 'error', text: err.message || 'ระบบบันทึกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' }); } finally { setEventLoading(false); }
   };
 
-  // 🟢 ฟังก์ชันสำหรับยกเลิกคอนเสิร์ต
   const handleCancelConcert = async () => {
-    if (!eventDate) {
-      setEventStatusMsg({ type: 'error', text: 'กรุณาเลือกวันที่ต้องการยกเลิกบนปฏิทินก่อนครับ' });
-      return;
-    }
-
-    const isConfirm = window.confirm(`ยืนยันการลบ/ยกเลิกงานวันที่ ${eventDate} ใช่หรือไม่?`);
+    if (!eventDate) { setEventStatusMsg({ type: 'error', text: 'กรุณาเลือกวันที่ต้องการยกเลิกบนปฏิทินก่อนครับ' }); return; }
+    const isConfirm = window.confirm(`ยืนยันการลบ/ยกเลิกการตั้งค่างานวันที่ ${eventDate} ใช่หรือไม่?`);
     if (!isConfirm) return;
-
-    setEventLoading(true);
-    setEventStatusMsg(null);
-
+    setEventLoading(true); setEventStatusMsg(null);
     try {
-      const { error } = await supabase
-        .from('shop_events')
-        .delete()
-        .eq('shop_id', shopSlug)
-        .eq('event_date', eventDate);
-
+      const { error } = await supabase.from('shop_events').delete().eq('shop_id', shopSlug).eq('event_date', eventDate);
       if (error) throw error;
-
       setEventStatusMsg({ type: 'success', text: `🗑️ เคลียร์ข้อมูลงานวันที่ ${eventDate} เรียบร้อยแล้ว` });
-      await loadEventsData(); // รีเฟรชข้อมูลในปฏิทินให้เป็นวันว่างๆ ทันที
-    } catch (err: any) {
-      console.error(err);
-      setEventStatusMsg({ type: 'error', text: err.message || 'ระบบยกเลิกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' });
-    } finally {
-      setEventLoading(false);
-    }
+      await loadEventsData(); 
+    } catch (err: any) { console.error(err); setEventStatusMsg({ type: 'error', text: err.message || 'ระบบยกเลิกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' }); } finally { setEventLoading(false); }
   };
 
   const handleSendReport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSendingReport(true);
+    e.preventDefault(); setIsSendingReport(true);
     try {
       const bossEmail = "nattanonchatram05@gmail.com"; 
       const subject = encodeURIComponent(`[Report Bug] ปัญหาจากสาขา: ${shopName}`);
-      const body = encodeURIComponent(
-        `🚨 รายงานปัญหาจากระบบควบคุมคิวหน้าร้าน\n` +
-        `----------------------------------------\n` +
-        `🏢 ร้านสาขา: ${shopName}\n` +
-        `📁 ประเภทปัญหา: ${reportForm.issueType}\n` +
-        `📝 รายละเอียดที่พบ:\n${reportForm.details}\n` +
-        `----------------------------------------\n` +
-        `ส่งจากระบบ: 21st Live Reservation Controller`
-      );
-
+      const body = encodeURIComponent(`🚨 รายงานปัญหาจากระบบควบคุมคิวหน้าร้าน\n----------------------------------------\n🏢 ร้านสาขา: ${shopName}\n📁 ประเภทปัญหา: ${reportForm.issueType}\n📝 รายละเอียดที่พบ:\n${reportForm.details}\n----------------------------------------\nส่งจากระบบ: 21st Live Reservation Controller`);
       window.location.href = `mailto:${bossEmail}?subject=${subject}&body=${body}`;
-
-      setReportForm({ issueType: 'ระบบจองขัดข้อง', details: '' });
-      setIsReportModalOpen(false);
+      setReportForm({ issueType: 'ระบบจองขัดข้อง', details: '' }); setIsReportModalOpen(false);
       triggerNotice('success', 'เรียกใช้งานอีเมลสำเร็จ', 'ระบบได้ทำการเปิดหน้าแอปพลิเคชันอีเมลหลักเพื่อเตรียมจัดส่งรายงานปัญหาให้ทีมโปรแกรมเมอร์แล้วครับ');
-    } catch (err) {
-      console.error(err);
-      triggerNotice('error', 'ระบบเรียกใช้สิทธิ์พัง', 'ไม่สามารถเปิดลิงก์จดหมายอีเมลของเครื่องคอมพิวเตอร์ได้ครับ');
-    } finally {
-      setIsSendingReport(false);
-    }
+    } catch (err) { console.error(err); triggerNotice('error', 'ระบบเรียกใช้สิทธิ์พัง', 'ไม่สามารถเปิดลิงก์จดหมายอีเมลของเครื่องคอมพิวเตอร์ได้ครับ'); } finally { setIsSendingReport(false); }
   };
 
-  // 🟢 อัปเดต: ให้บังคับซ่อนรายการของอดีตทั้งหมด ไม่ว่าจะติด pending หรือไม่ หากไม่ได้เปิดประวัติอดีต
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return bookings.filter((b) => {
       const matchesZone = zone === 'ALL' || b.table_number?.startsWith(`${zone}-`);
       if (!matchesZone) return false;
-      
       const liveStatus = deriveStatus(b);
-      
-      // บังคับซ่อนอดีตทั้งหมด (รวมถึง pending) ถ้าไม่ได้เปิดโหมดดูประวัติหรือไม่ได้กำลังค้นหา
       if (liveStatus === 'past' && !showPast && !q) return false;
-
-      if (q) {
-        return (
-          b.customer_name?.toLowerCase().includes(q) ||
-          b.booking_code?.toLowerCase().includes(q) ||
-          b.phone?.toLowerCase().includes(q)
-        );
-      }
+      if (q) { return (b.customer_name?.toLowerCase().includes(q) || b.booking_code?.toLowerCase().includes(q) || b.phone?.toLowerCase().includes(q)); }
       return true;
     });
   }, [bookings, query, zone, showPast]);
 
   const handleExportCSV = () => {
-    if (filtered.length === 0) {
-      triggerNotice('error', 'ไม่สามารถดาวน์โหลดได้', 'ไม่มีข้อมูลในหน้าฟีดให้ดาวน์โหลดในขณะนี้ครับ');
-      return;
-    }
+    if (filtered.length === 0) { triggerNotice('error', 'ไม่สามารถดาวน์โหลดได้', 'ไม่มีข้อมูลในหน้าฟีดให้ดาวน์โหลดในขณะนี้ครับ'); return; }
     const headers = ['วันที่จอง', 'เวลานัดหมาย', 'รหัสใบจอง', 'ชื่อลูกค้า', 'เบอร์โทรศัพท์', 'รหัสโต๊ะ', 'จำนวนแขก', 'สถานะคิว', 'ค่าบัตรแพ็กเกจรวม'];
     const rows = filtered.map((b) => {
       let statusText = 'รอเช็คอิน';
       if (b.status === 'pending') statusText = 'รอชำระเงิน';
       else if (b.status === 'checked_in') statusText = 'มาแล้ว';
       else if (b.status === 'no_show') statusText = 'ไม่มา (No Show)';
-      
       const tablePrice = eventsMap[b.booking_date]?.price || 0;
-
-      return [
-        b.booking_date, 
-        (b.booking_time || '').slice(0, 5), 
-        b.booking_code, 
-        `"${b.customer_name?.replace(/"/g, '""')}"`, 
-        `="${b.phone}"`, 
-        b.table_number, 
-        b.guests_count, 
-        statusText, 
-        `${tablePrice} บาท`
-      ];
+      return [ b.booking_date, (b.booking_time || '').slice(0, 5), b.booking_code, `"${b.customer_name?.replace(/"/g, '""')}"`, `="${b.phone}"`, b.table_number, b.guests_count, statusText, `${tablePrice} บาท` ];
     });
-
     const csvContent = ['\uFEFF' + headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Report_Monitor_${shopSlug}_${new Date().toISOString().split('T')[0]}.csv`);
-    link.click();
+    const link = document.createElement('a'); link.href = url; link.setAttribute('download', `Report_Monitor_${shopSlug}_${new Date().toISOString().split('T')[0]}.csv`); link.click();
   };
 
   const totalRevenue = useMemo(() => {
@@ -651,42 +392,19 @@ export default function MonitorPage() {
 
   const groupedByDate = useMemo(() => {
     const groups: Record<string, typeof bookings> = {};
-    filtered.forEach((b) => {
-      const dateStr = b.booking_date || 'ไม่ระบุวันที่';
-      if (!groups[dateStr]) groups[dateStr] = [];
-      groups[dateStr].push(b);
-    });
+    filtered.forEach((b) => { const dateStr = b.booking_date || 'ไม่ระบุวันที่'; if (!groups[dateStr]) groups[dateStr] = []; groups[dateStr].push(b); });
     return groups;
   }, [filtered]);
 
   const sortedDates = useMemo(() => Object.keys(groupedByDate).sort(), [groupedByDate]);
-
-  const tonightCount = useMemo(
-    () => bookings.filter((b) => deriveStatus(b) === 'tonight' && b.status !== 'no_show' && b.status !== 'pending').length,
-    [bookings]
-  );
-
+  const tonightCount = useMemo(() => bookings.filter((b) => deriveStatus(b) === 'tonight' && b.status !== 'no_show' && b.status !== 'pending').length, [bookings]);
   const adminDayTablesMap = useMemo(() => {
     const dayBookings = bookings.filter(b => b.booking_date === adminSelectedDate && b.status !== 'no_show');
-    return dayBookings.reduce((acc, curr) => ({
-      ...acc,
-      [curr.table_number]: curr.status === 'pending' ? 'pending' : 'booked'
-    }), {} as Record<string, 'booked' | 'pending'>);
+    return dayBookings.reduce((acc, curr) => ({ ...acc, [curr.table_number]: curr.status === 'pending' ? 'pending' : 'booked' }), {} as Record<string, 'booked' | 'pending'>);
   }, [bookings, adminSelectedDate]);
 
   if (!shopExists) return notFound();
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center font-sans" style={{ backgroundColor: THEME.bg }}>
-        <div className="text-center space-y-3">
-          <Loader2 size={36} className="animate-spin mx-auto" style={{ color: THEME.pink }} />
-          <p className="text-sm font-medium" style={{ color: THEME.muted }}>กำลังตรวจสอบสิทธิ์การเข้าถึงระบบควบคุม...</p>
-        </div>
-      </div>
-    );
-  }
-
+  if (authLoading) return ( <div className="min-h-screen flex items-center justify-center font-sans" style={{ backgroundColor: THEME.bg }}> <div className="text-center space-y-3"> <Loader2 size={36} className="animate-spin mx-auto" style={{ color: THEME.pink }} /> <p className="text-sm font-medium" style={{ color: THEME.muted }}>กำลังตรวจสอบสิทธิ์การเข้าถึงระบบควบคุม...</p> </div> </div> );
   if (!session) {
     return (
       <div className="min-h-screen w-full font-sans flex items-center justify-center p-4 relative" style={{ backgroundColor: THEME.bg, color: THEME.text }}>
@@ -694,65 +412,17 @@ export default function MonitorPage() {
           <div className="absolute -top-32 -right-24 h-[420px] w-[420px] rounded-full blur-[140px]" style={{ backgroundColor: `${THEME.pink}12` }} />
           <div className="absolute -bottom-32 -left-24 h-[380px] w-[380px] rounded-full blur-[130px]" style={{ backgroundColor: `${THEME.purple}12` }} />
         </div>
-
         <div className="w-full max-w-md p-6 sm:p-8 border rounded-3xl z-10 shadow-2xl transition-all" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
           <div className="text-center space-y-1.5 mb-6">
-            <div className="h-12 w-12 rounded-2xl bg-pink-500/10 flex items-center justify-center mx-auto border" style={{ borderColor: `${THEME.pink}30` }}>
-              <Lock size={22} style={{ color: THEME.pink }} />
-            </div>
+            <div className="h-12 w-12 rounded-2xl bg-pink-500/10 flex items-center justify-center mx-auto border" style={{ borderColor: `${THEME.pink}30` }}><Lock size={22} style={{ color: THEME.pink }} /></div>
             <h2 className="text-2xl font-extrabold tracking-tight text-white">Live Reservation Gate</h2>
             <p className="text-xs" style={{ color: THEME.muted }}>กรุณาล็อกอินเข้าสู่ระบบเพื่อเข้าใช้งานแผงควบคุมหน้าร้าน</p>
           </div>
-
           <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-mono uppercase tracking-wider text-slate-300">อีเมลผู้ใช้งาน</label>
-              <div className="relative flex items-center">
-                <Mail size={16} className="absolute left-4 text-slate-500" />
-                <input 
-                  type="email" required
-                  value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="name@restaurant.com"
-                  className="w-full bg-black/40 border rounded-xl pl-11 pr-4 h-11 text-white outline-none focus:border-pink-500 text-sm transition-all"
-                  style={{ borderColor: THEME.border }}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-mono uppercase tracking-wider text-slate-300">รหัสผ่านหลังบ้าน</label>
-              <div className="relative flex items-center">
-                <Hash size={16} className="absolute left-4 text-slate-500" />
-                <input 
-                  type="password" required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-black/40 border rounded-xl pl-11 pr-4 h-11 text-white outline-none focus:border-pink-500 text-sm transition-all"
-                  style={{ borderColor: THEME.border }}
-                />
-              </div>
-            </div>
-
-            {authError && (
-              <div className="p-3.5 rounded-xl border flex items-center gap-2 text-xs bg-red-500/10 border-red-500/30 text-red-400">
-                <AlertCircle size={15} className="shrink-0" />
-                <span className="font-medium">{authError}</span>
-              </div>
-            )}
-
-            <button
-              type="submit" disabled={isLoggingIn}
-              className="w-full h-11 rounded-xl font-bold text-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
-              style={{ backgroundColor: THEME.gold, boxShadow: `0 4px 15px rgba(229, 184, 66, 0.2)` }}
-            >
-              {isLoggingIn ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  กำลังยืนยันตัวตน...
-                </>
-              ) : 'เข้าสู่ระบบควบคุมคิว'}
-            </button>
+            <div className="space-y-1.5"><label className="text-xs font-mono uppercase tracking-wider text-slate-300">อีเมลผู้ใช้งาน</label><div className="relative flex items-center"><Mail size={16} className="absolute left-4 text-slate-500" /><input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="name@restaurant.com" className="w-full bg-black/40 border rounded-xl pl-11 pr-4 h-11 text-white outline-none focus:border-pink-500 text-sm transition-all" style={{ borderColor: THEME.border }} /></div></div>
+            <div className="space-y-1.5"><label className="block text-xs font-mono uppercase tracking-wider text-slate-300">รหัสผ่านหลังบ้าน</label><div className="relative flex items-center"><Hash size={16} className="absolute left-4 text-slate-500" /><input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="w-full bg-black/40 border rounded-xl pl-11 pr-4 h-11 text-white outline-none focus:border-pink-500 text-sm transition-all" style={{ borderColor: THEME.border }} /></div></div>
+            {authError && <div className="p-3.5 rounded-xl border flex items-center gap-2 text-xs bg-red-500/10 border-red-500/30 text-red-400"><AlertCircle size={15} className="shrink-0" /><span className="font-medium">{authError}</span></div>}
+            <button type="submit" disabled={isLoggingIn} className="w-full h-11 rounded-xl font-bold text-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2" style={{ backgroundColor: THEME.gold, boxShadow: `0 4px 15px rgba(229, 184, 66, 0.2)` }}>{isLoggingIn ? <><Loader2 size={16} className="animate-spin" />กำลังยืนยันตัวตน...</> : 'เข้าสู่ระบบควบคุมคิว'}</button>
           </form>
         </div>
       </div>
@@ -767,169 +437,65 @@ export default function MonitorPage() {
       </div>
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Header */}
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-slate-800/60 pb-5">
           <div>
             <div className="flex items-center gap-2">
               <span className="flex h-2.5 w-2.5 rounded-full animate-pulse" style={{ backgroundColor: THEME.pink, boxShadow: `0 0 12px ${THEME.pink}` }} />
-              <span className="font-mono text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: THEME.pink }}>
-                21st Live Reservation Controller
-              </span>
+              <span className="font-mono text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: THEME.pink }}>21st Live Reservation Controller</span>
             </div>
             <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white">{shopName}</h1>
           </div>
-
           <div className="flex flex-wrap items-center gap-3 z-50">
-            <button
-              type="button"
-              onClick={() => { setIsEventModalOpen(true); setEventStatusMsg(null); }}
-              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95 text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20"
-            >
-              <Music size={14} />
-              จัดการวันคอนเสิร์ต
-            </button>
-
+            <button type="button" onClick={() => { setIsEventModalOpen(true); setEventStatusMsg(null); }} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95 text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20"><Music size={14} />จัดการปฏิทินร้าน</button>
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold border transition-all active:scale-95 ${
-                  isBookingOpen ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'
-                }`}
-              >
+              <button type="button" onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold border transition-all active:scale-95 ${isBookingOpen ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
                 <Radio size={14} className={isBookingOpen ? "animate-pulse text-emerald-400" : "text-red-400"} />
-                <div>
-                  <p className="font-mono text-[9px] uppercase tracking-widest font-bold leading-none text-left opacity-70">SYSTEM STATUS</p>
-                  <p className="text-xs font-bold mt-0.5">{isBookingOpen ? `ระบบเปิดปกติ • Sync: ${lastSync}` : 'ปิดระบบรับคิวออนไลน์'}</p>
-                </div>
+                <div><p className="font-mono text-[9px] uppercase tracking-widest font-bold leading-none text-left opacity-70">SYSTEM STATUS</p><p className="text-xs font-bold mt-0.5">{isBookingOpen ? `ระบบเปิดปกติ • Sync: ${lastSync}` : 'ปิดระบบรับคิวออนไลน์'}</p></div>
                 <ChevronDown size={12} className="ml-1 opacity-70" />
               </button>
-
               <AnimatePresence>
                 {isStatusDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#16161E] border border-[#2D2235] p-1.5 shadow-2xl space-y-1 z-50">
-                    <button type="button" onClick={() => handleToggleBookingStatus(true)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-emerald-400 font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> เปิดรับจองออนไลน์ปกติ
-                    </button>
-                    <button type="button" onClick={() => handleToggleBookingStatus(false)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-red-400 font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-400" /> ปิดระบบรับคิวล่วงหน้าชั่วคราว
-                    </button>
+                    <button type="button" onClick={() => handleToggleBookingStatus(true)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-emerald-400 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> เปิดรับจองออนไลน์ปกติ</button>
+                    <button type="button" onClick={() => handleToggleBookingStatus(false)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-red-400 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-red-400" /> ปิดระบบรับคิวล่วงหน้าชั่วคราว</button>
                   </div>
                 )}
               </AnimatePresence>
             </div>
-
-            <button
-              onClick={() => setIsReportModalOpen(true)}
-              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95 text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20"
-            >
-              <AlertTriangle size={14} />
-              รายงานปัญหา
-            </button>
-
-            <button
-              type="button"
-              onClick={handleLogoutClick}
-              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95 text-gray-400 border-slate-800 bg-black/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
-            >
-              <LogOut size={14} />
-              ออกจากระบบ
-            </button>
+            <button onClick={() => setIsReportModalOpen(true)} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95 text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20"><AlertTriangle size={14} />รายงานปัญหา</button>
+            <button type="button" onClick={handleLogoutClick} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95 text-gray-400 border-slate-800 bg-black/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"><LogOut size={14} />ออกจากระบบ</button>
           </div>
         </header>
 
-        {/* Stat Ribbon */}
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatPill icon={CalendarDays} label="Total Bookings" value={`${bookings.length} คิว`} accent={THEME.text} />
           <StatPill icon={CircleDot} label="Active Tonight" value={`${tonightCount} โต๊ะ`} accent={THEME.mint} />
           <StatPill icon={Coins} label="Concert Ticket Revenue" value={`${totalRevenue.toLocaleString()} ฿`} accent={THEME.gold} />
-          <StatPill
-            icon={Users}
-            label="Guests Inbound"
-            value={`${bookings
-              .filter((b) => deriveStatus(b) === 'tonight' && b.status !== 'no_show' && b.status !== 'pending').length} โต๊ะ`}
-            accent="#8B9DFF"
-          />
+          <StatPill icon={Users} label="Guests Inbound" value={`${bookings.filter((b) => deriveStatus(b) === 'tonight' && b.status !== 'no_show' && b.status !== 'pending').length} โต๊ะ`} accent="#8B9DFF" />
         </div>
 
-        {/* Filters Controls */}
         <div className="mt-6 flex flex-col gap-3 lg:flex-row justify-between items-stretch lg:items-center">
-          
           <div className="flex flex-1 items-center gap-2.5 rounded-xl px-4 h-11 bg-black/20 border" style={{ borderColor: THEME.border }}>
             <Search size={18} style={{ color: THEME.muted }} />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="ค้นหาชื่อลูกค้า / รหัสจอง / เบอร์โทร..."
-              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600 text-white"
-            />
+            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า / รหัสจอง / เบอร์โทร..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600 text-white" />
           </div>
-
           <div className="flex gap-3 flex-wrap items-center">
             <div className="bg-black/40 border p-1 rounded-xl flex items-center gap-1 h-11" style={{ borderColor: THEME.border }}>
-              <button 
-                type="button"
-                onClick={() => setViewMode('list')}
-                className={`flex items-center gap-1.5 px-3 h-full rounded-lg text-xs font-bold transition-all ${viewMode === 'list' ? 'bg-[#FF1F88] text-white shadow-md' : 'text-[#9E9EAF] hover:text-white'}`}
-              >
-                <LayoutGrid size={13} /> รายชื่อคิว
-              </button>
-              <button 
-                type="button"
-                onClick={() => setViewMode('floorplan')}
-                className={`flex items-center gap-1.5 px-3 h-full rounded-lg text-xs font-bold transition-all ${viewMode === 'floorplan' ? 'bg-[#FF1F88] text-white shadow-md' : 'text-[#9E9EAF] hover:text-white'}`}
-              >
-                <Map size={13} /> ผังร้าน & บล็อกโต๊ะ
-              </button>
+              <button type="button" onClick={() => setViewMode('list')} className={`flex items-center gap-1.5 px-3 h-full rounded-lg text-xs font-bold transition-all ${viewMode === 'list' ? 'bg-[#FF1F88] text-white shadow-md' : 'text-[#9E9EAF] hover:text-white'}`}><LayoutGrid size={13} /> รายชื่อคิว</button>
+              <button type="button" onClick={() => setViewMode('floorplan')} className={`flex items-center gap-1.5 px-3 h-full rounded-lg text-xs font-bold transition-all ${viewMode === 'floorplan' ? 'bg-[#FF1F88] text-white shadow-md' : 'text-[#9E9EAF] hover:text-white'}`}><Map size={13} /> ผังร้าน & บล็อกโต๊ะ</button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => { setShowPast(!showPast); }}
-              className="flex items-center gap-2 rounded-xl px-4 h-11 text-sm font-medium border transition-all active:scale-95"
-              style={{
-                backgroundColor: showPast ? `${THEME.purple}1A` : 'transparent',
-                borderColor: showPast ? THEME.purple : THEME.border,
-                color: showPast ? THEME.purple : THEME.text,
-              }}
-            >
-              <History size={16} />
-              <span>ประวัติอดีต</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/50">
-                {showPast ? 'ON' : 'OFF'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="flex items-center gap-2 rounded-xl px-4 h-11 text-sm font-bold border transition-all active:scale-95 bg-transparent hover:bg-white/5"
-              style={{ borderColor: THEME.border, color: THEME.mint }}
-            >
-              <Download size={16} />
-              <span>Export CSV Report</span>
-            </button>
-
+            <button type="button" onClick={() => { setShowPast(!showPast); }} className="flex items-center gap-2 rounded-xl px-4 h-11 text-sm font-medium border transition-all active:scale-95" style={{ backgroundColor: showPast ? `${THEME.purple}1A` : 'transparent', borderColor: showPast ? THEME.purple : THEME.border, color: showPast ? THEME.purple : THEME.text }}><History size={16} /><span>ประวัติอดีต</span><span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/50">{showPast ? 'ON' : 'OFF'}</span></button>
+            <button type="button" onClick={handleExportCSV} className="flex items-center gap-2 rounded-xl px-4 h-11 text-sm font-bold border transition-all active:scale-95 bg-transparent hover:bg-white/5" style={{ borderColor: THEME.border, color: THEME.mint }}><Download size={16} /><span>Export CSV Report</span></button>
             <div className="relative flex items-center rounded-xl bg-black/20 border h-11" style={{ borderColor: THEME.border }}>
               <Filter size={16} className="pointer-events-none absolute left-4" style={{ color: THEME.muted }} />
-              <select
-                value={zone}
-                onChange={(e) => setZone(e.target.value as ZoneId)}
-                className="h-full cursor-pointer appearance-none bg-transparent pl-11 pr-10 text-sm font-medium outline-none text-white rounded-xl"
-              >
-                {ZONES.map((z) => (
-                  <option key={z.id} value={z.id} style={{ backgroundColor: THEME.card }}>
-                    {z.label}
-                  </option>
-                ))}
+              <select value={zone} onChange={(e) => setZone(e.target.value as ZoneId)} className="h-full cursor-pointer appearance-none bg-transparent pl-11 pr-10 text-sm font-medium outline-none text-white rounded-xl">
+                {ZONES.map((z) => (<option key={z.id} value={z.id} style={{ backgroundColor: THEME.card }}>{z.label}</option>))}
               </select>
               <ChevronDown size={16} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} />
             </div>
           </div>
         </div>
 
-        {/* Main Feed */}
         <main className="mt-6">
           {error && <div className="mb-4 rounded-xl px-4 py-3 text-sm font-medium bg-red-950 border border-red-500 text-red-300">{error}</div>}
 
@@ -954,11 +520,14 @@ export default function MonitorPage() {
                         </h2>
                         
                         {dayEvent && dayEvent.event_type === 'concert' && (
-                          <span 
-                            className="text-[11px] px-2.5 py-0.5 rounded-md font-bold border font-sans animate-pulse"
-                            style={{ backgroundColor: `${THEME.pink}10`, borderColor: `${THEME.pink}40`, color: THEME.pink }}
-                          >
+                          <span className="text-[11px] px-2.5 py-0.5 rounded-md font-bold border font-sans animate-pulse" style={{ backgroundColor: `${THEME.pink}10`, borderColor: `${THEME.pink}40`, color: THEME.pink }}>
                             🎵 โหมดอีเวนต์: {dayEvent.title} (บัตรเหมาต่อโต๊ะ {dayEvent.price.toLocaleString()}.-)
+                          </span>
+                        )}
+                        {/* 🟢 แจ้งเตือนวันหยุดร้านบนหน้า Feed */}
+                        {dayEvent && dayEvent.event_type === 'closed' && (
+                          <span className="text-[11px] px-2.5 py-0.5 rounded-md font-bold border font-sans" style={{ backgroundColor: `rgba(239, 68, 68, 0.1)`, borderColor: `rgba(239, 68, 68, 0.4)`, color: '#EF4444' }}>
+                            🛑 วันหยุดร้าน (ลูกค้าจองไม่ได้)
                           </span>
                         )}
 
@@ -974,6 +543,7 @@ export default function MonitorPage() {
                             booking={b} 
                             eventPrice={eventsMap[b.booking_date]?.price || 0}
                             onUpdateStatus={handleUpdateStatus}
+                            onViewSlip={(bookingData) => setSelectedBookingForSlip(bookingData)} 
                           />
                         ))}
                       </div>
@@ -1018,145 +588,171 @@ export default function MonitorPage() {
         </main>
       </div>
 
-      {/* Custom คอนเฟิร์มป็อปอัปอัจฉริยะ ล็อก/ปลดล็อกโต๊ะแมนนวล */}
+      <AnimatePresence>
+        {selectedBookingForSlip && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+              className="fixed inset-0 bg-black/85 backdrop-blur-sm"
+              onClick={() => setSelectedBookingForSlip(null)} 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-md bg-[#16161E] border border-[#2D2235] shadow-[0_0_50px_rgba(0,0,0,0.8)] rounded-2xl flex flex-col relative z-10 max-h-[90vh] overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-slate-800/80 bg-black/20 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-amber-500/10 rounded-xl text-amber-400 border border-amber-500/20"><Search size={16}/></div>
+                  <h3 className="text-lg font-bold text-white tracking-wide">ข้อมูลการจอง & สลิป</h3>
+                </div>
+                <button onClick={() => setSelectedBookingForSlip(null)} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
+                <div>
+                  <h4 className="text-xs font-mono text-slate-400 mb-2 uppercase tracking-wider">หลักฐานการชำระเงิน</h4>
+                  {selectedBookingForSlip.slip_url ? (
+                    <div className="w-full rounded-xl overflow-hidden bg-black/50 border border-slate-800 relative group">
+                      <img 
+                        src={selectedBookingForSlip.slip_url} 
+                        alt="Payment Slip" 
+                        className="w-full h-auto max-h-[50vh] object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full h-32 rounded-xl bg-black/40 border border-dashed border-slate-700 flex flex-col items-center justify-center text-slate-500">
+                      <ImageIcon size={24} className="mb-2 opacity-50"/>
+                      <span className="text-xs font-medium">ไม่พบรูปภาพสลิปแนบมาในระบบ</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-black/30 rounded-xl p-4 border border-slate-800/50 shadow-inner space-y-3 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 text-xs">สถานะคิว:</span> 
+                    <span className="font-bold text-white text-right px-2 py-0.5 rounded text-[11px]" style={{ backgroundColor: `${STATUS_META[selectedBookingForSlip.status]?.color || THEME.muted}20`, color: STATUS_META[selectedBookingForSlip.status]?.color || THEME.text }}>
+                      {STATUS_META[selectedBookingForSlip.status]?.label || selectedBookingForSlip.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">ชื่อลูกค้า:</span> <span className="font-bold text-white text-right">{selectedBookingForSlip.customer_name}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เบอร์ติดต่อ:</span> <span className="font-mono text-white text-right">{selectedBookingForSlip.phone}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">วันที่จอง:</span> <span className="font-mono text-white">{selectedBookingForSlip.booking_date}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">โต๊ะที่จอง:</span> <span className="font-bold text-emerald-400 text-right">{selectedBookingForSlip.table_number}</span></div>
+                  
+                  <div className="border-t border-slate-800/80 pt-3 mt-1 flex justify-between items-center bg-amber-500/5 -mx-4 px-4 pb-1">
+                    <span className="text-amber-500/80 text-xs font-bold">ยอดที่ต้องชำระ (อ้างอิงรายโต๊ะ):</span> 
+                    <span className="font-black text-amber-400 text-base">
+                      {((eventsMap[selectedBookingForSlip.booking_date]?.price || 0)).toLocaleString()} ฿
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 border-t border-slate-800/80 bg-black/40 shrink-0 grid grid-cols-2 gap-3">
+                {selectedBookingForSlip.status === 'pending' ? (
+                  <>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        if(window.confirm('คุณต้องการปฏิเสธคิวและล้างโต๊ะนี้ให้ว่างใช่หรือไม่?')) {
+                          handleUpdateStatus(selectedBookingForSlip.id, 'no_show');
+                          setSelectedBookingForSlip(null);
+                        }
+                      }}
+                      className="py-3 rounded-xl text-xs font-bold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors"
+                    >
+                      ปฏิเสธคิว (ลบทิ้ง)
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        handleUpdateStatus(selectedBookingForSlip.id, 'confirmed');
+                        setSelectedBookingForSlip(null);
+                      }}
+                      className="py-3 rounded-xl text-xs font-bold text-black flex items-center justify-center gap-1.5 transition-transform active:scale-95 shadow-[0_0_15px_rgba(229,184,66,0.2)]"
+                      style={{ backgroundColor: THEME.gold }}
+                    >
+                      <Check size={14} className="stroke-[3]"/>
+                      ยืนยันรับยอดเงิน
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    type="button" 
+                    onClick={() => setSelectedBookingForSlip(null)}
+                    className="col-span-2 py-3 rounded-xl text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 transition-colors"
+                  >
+                    ปิดหน้าต่าง
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isLockConfirmModalOpen && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[999]">
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-md rounded-2xl border p-6 space-y-5 shadow-[0_0_50px_rgba(0,0,0,0.8)]"
-              style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-md rounded-2xl border p-6 space-y-5 shadow-[0_0_50px_rgba(0,0,0,0.8)]" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
             >
               <div className="flex items-center gap-3">
                 <div 
                   className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-colors"
-                  style={{ 
-                    backgroundColor: lockModalMode === 'lock' ? 'rgba(229, 184, 66, 0.1)' : 'rgba(0, 245, 212, 0.1)', 
-                    borderColor: lockModalMode === 'lock' ? 'rgba(229, 184, 66, 0.2)' : 'rgba(0, 245, 212, 0.2)', 
-                    color: lockModalMode === 'lock' ? THEME.gold : THEME.mint 
-                  }}
+                  style={{ backgroundColor: lockModalMode === 'lock' ? 'rgba(229, 184, 66, 0.1)' : 'rgba(0, 245, 212, 0.1)', borderColor: lockModalMode === 'lock' ? 'rgba(229, 184, 66, 0.2)' : 'rgba(0, 245, 212, 0.2)', color: lockModalMode === 'lock' ? THEME.gold : THEME.mint }}
                 >
                   <Lock size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-white">
-                    {lockModalMode === 'lock' ? 'ยืนยันคำสั่งล็อกตำแหน่งโต๊ะอาหาร' : 'ยืนยันคำสั่ง "ปลดล็อก" โต๊ะอาหาร'}
-                  </h3>
-                  <p className="text-[11px] text-[#9E9EAF] font-mono mt-0.5">
-                    {lockModalMode === 'lock' ? 'ADMIN MANUAL OVERRIDE PROTOCOL' : 'ADMIN DISMANTLE OVERRIDE PROTOCOL'}
-                  </p>
+                  <h3 className="text-base font-extrabold text-white">{lockModalMode === 'lock' ? 'ยืนยันคำสั่งล็อกตำแหน่งโต๊ะอาหาร' : 'ยืนยันคำสั่ง "ปลดล็อก" โต๊ะอาหาร'}</h3>
+                  <p className="text-[11px] text-[#9E9EAF] font-mono mt-0.5">{lockModalMode === 'lock' ? 'ADMIN MANUAL OVERRIDE PROTOCOL' : 'ADMIN DISMANTLE OVERRIDE PROTOCOL'}</p>
                 </div>
               </div>
-
               <div className="p-4 rounded-xl bg-black/40 border border-slate-800 text-xs sm:text-sm space-y-2 leading-relaxed">
-                <p className="text-gray-300">
-                  คุณต้องการทำการ {lockModalMode === 'lock' ? <span className="text-pink-500 font-extrabold">ล็อกโต๊ะหมายเลข {tablePendingLock}</span> : <span className="text-emerald-400 font-extrabold">ปลดล็อกโต๊ะหมายเลข {tablePendingLock}</span>} ใช่หรือไม่?
-                </p>
+                <p className="text-gray-300">คุณต้องการทำการ {lockModalMode === 'lock' ? <span className="text-pink-500 font-extrabold">ล็อกโต๊ะหมายเลข {tablePendingLock}</span> : <span className="text-emerald-400 font-extrabold">ปลดล็อกโต๊ะหมายเลข {tablePendingLock}</span>} ใช่หรือไม่?</p>
                 <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px] text-slate-400">
                   <div className="flex items-center gap-1"><CalendarDays size={12} className="text-[#E5B842]" /> วันที่: {adminSelectedDate}</div>
                   <div className="flex items-center gap-1"><Users size={12} className="text-[#00F5D4]" /> โดย: สตาฟฟ์หลังบ้าน</div>
                 </div>
               </div>
-
               <div className="p-3 border rounded-xl text-[11px] flex items-start gap-2 leading-relaxed" style={{ backgroundColor: lockModalMode === 'lock' ? 'rgba(239,68,68,0.05)' : 'rgba(0,245,212,0.05)', borderColor: lockModalMode === 'lock' ? 'rgba(239,68,68,0.1)' : 'rgba(0,245,212,0.1)', color: lockModalMode === 'lock' ? '#F87171' : THEME.mint }}>
                 <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                <span>
-                  {lockModalMode === 'lock' 
-                    ? 'เมื่อกดยืนยันแล้ว ตำแหน่งโต๊ะนี้บนหน้าจอจองของลูกค้าออนไลน์ทุกคนจะเปลี่ยนเป็นสีแดง (ไม่ว่าง) ทันทีในรูปแบบเรียลไทม์ครับ'
-                    : 'เมื่อกดยืนยันแล้ว ระบบจะทำการล้างสถานะบล็อกออก โต๊ะนี้จะกลับมาเปิดเป็นสีเขียว (ว่าง) เพื่อให้ลูกค้าออนไลน์จากทางบ้านแย่งกดจองเข้ามาได้ตามปกติทันทีครับ'
-                  }
-                </span>
+                <span>{lockModalMode === 'lock' ? 'เมื่อกดยืนยันแล้ว ตำแหน่งโต๊ะนี้บนหน้าจอจองของลูกค้าออนไลน์ทุกคนจะเปลี่ยนเป็นสีแดง (ไม่ว่าง) ทันทีในรูปแบบเรียลไทม์ครับ' : 'เมื่อกดยืนยันแล้ว ระบบจะทำการล้างสถานะบล็อกออก โต๊ะนี้จะกลับมาเปิดเป็นสีเขียว (ว่าง) เพื่อให้ลูกค้าออนไลน์จากทางบ้านแย่งกดจองเข้ามาได้ตามปกติทันทีครับ'}</span>
               </div>
-
               <div className="flex items-center gap-3 pt-1 font-bold text-xs">
-                <button
-                  type="button"
-                  disabled={isLockProcessing}
-                  onClick={() => { setIsLockConfirmModalOpen(false); setTablePendingLock(null); }}
-                  className="flex-1 h-10 rounded-xl border border-slate-700 hover:bg-white/5 text-white transition-colors active:scale-95 disabled:opacity-40"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  disabled={isLockProcessing}
-                  onClick={executeAdminLockTable}
-                  className="flex-1 h-10 rounded-xl text-black font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40"
-                  style={{ 
-                    backgroundColor: lockModalMode === 'lock' ? THEME.gold : THEME.mint, 
-                    boxShadow: lockModalMode === 'lock' ? '0 4px 15px rgba(229, 184, 66, 0.2)' : '0 4px 15px rgba(0, 245, 212, 0.2)' 
-                  }}
-                >
-                  {isLockProcessing ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <>
-                      <Check size={14} />
-                      {lockModalMode === 'lock' ? 'ยืนยันล็อกโต๊ะ' : 'ยืนยันปลดล็อกโต๊ะ'}
-                    </>
-                  )}
-                </button>
+                <button type="button" disabled={isLockProcessing} onClick={() => { setIsLockConfirmModalOpen(false); setTablePendingLock(null); }} className="flex-1 h-10 rounded-xl border border-slate-700 hover:bg-white/5 text-white transition-colors active:scale-95 disabled:opacity-40">ยกเลิก</button>
+                <button type="button" disabled={isLockProcessing} onClick={executeAdminLockTable} className="flex-1 h-10 rounded-xl text-black font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40" style={{ backgroundColor: lockModalMode === 'lock' ? THEME.gold : THEME.mint, boxShadow: lockModalMode === 'lock' ? '0 4px 15px rgba(229, 184, 66, 0.2)' : '0 4px 15px rgba(0, 245, 212, 0.2)' }}>{isLockProcessing ? <Loader2 size={14} className="animate-spin" /> : <><Check size={14} />{lockModalMode === 'lock' ? 'ยืนยันล็อกโต๊ะ' : 'ยืนยันปลดล็อกโต๊ะ'}</>}</button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* 🟢 Custom Premium Notice Modal */}
       <AnimatePresence>
         {appNotice.isOpen && (
           <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 8 }}
-              className="w-full max-w-sm rounded-2xl border p-5 text-center space-y-4 shadow-[0_20px_50px_rgba(0,0,0,0.9)]"
-              style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
-            >
-              <div 
-                className="w-12 h-12 rounded-full border flex items-center justify-center mx-auto text-base"
-                style={{
-                  backgroundColor: appNotice.type === 'success' ? 'rgba(0,245,212,0.1)' : appNotice.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(229,184,66,0.1)',
-                  borderColor: appNotice.type === 'success' ? 'rgba(0,245,212,0.2)' : appNotice.type === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(229,184,66,0.2)',
-                  color: appNotice.type === 'success' ? THEME.mint : appNotice.type === 'error' ? '#F87171' : THEME.gold
-                }}
-              >
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 8 }} className="w-full max-w-sm rounded-2xl border p-5 text-center space-y-4 shadow-[0_20px_50px_rgba(0,0,0,0.9)]" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
+              <div className="w-12 h-12 rounded-full border flex items-center justify-center mx-auto text-base" style={{ backgroundColor: appNotice.type === 'success' ? 'rgba(0,245,212,0.1)' : appNotice.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(229,184,66,0.1)', borderColor: appNotice.type === 'success' ? 'rgba(0,245,212,0.2)' : appNotice.type === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(229,184,66,0.2)', color: appNotice.type === 'success' ? THEME.mint : appNotice.type === 'error' ? '#F87171' : THEME.gold }}>
                 {appNotice.type === 'success' ? <CheckCircle size={22} /> : appNotice.type === 'error' ? <AlertCircle size={22} /> : <Radio size={22} className="animate-pulse" />}
               </div>
-
-              <div className="space-y-1">
-                <h4 className="text-base font-bold text-white tracking-wide">{appNotice.title}</h4>
-                <p className="text-xs text-[#9E9EAF] leading-relaxed px-1">{appNotice.message}</p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setAppNotice(prev => ({ ...prev, isOpen: false }))}
-                className="w-full h-10 font-bold rounded-xl text-xs transition-transform active:scale-[0.97] text-white hover:bg-white/5 border border-slate-700"
-              >
-                รับทราบคำแนะนำ
-              </button>
+              <div className="space-y-1"><h4 className="text-base font-bold text-white tracking-wide">{appNotice.title}</h4><p className="text-xs text-[#9E9EAF] leading-relaxed px-1">{appNotice.message}</p></div>
+              <button type="button" onClick={() => setAppNotice(prev => ({ ...prev, isOpen: false }))} className="w-full h-10 font-bold rounded-xl text-xs transition-transform active:scale-[0.97] text-white hover:bg-white/5 border border-slate-700">รับทราบคำแนะนำ</button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Pop-up จัดการวันคอนเสิร์ต */}
       {isEventModalOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 transition-all overflow-y-auto">
           <div className="w-full max-w-2xl rounded-2xl p-6 border my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
             <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: THEME.border }}>
-              <div className="flex items-center gap-2">
-                <Music style={{ color: THEME.pink }} size={20} />
-                <h2 className="text-xl font-bold tracking-tight text-white">ตั้งค่าปฏิทินกิจกรรมวันคอนเสิร์ต</h2>
-              </div>
-              <button onClick={() => { setIsEventModalOpen(false); }} className="text-slate-400 hover:text-white transition-colors">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2"><Music style={{ color: THEME.pink }} size={20} /><h2 className="text-xl font-bold tracking-tight text-white">ตั้งค่าปฏิทินร้านและอีเวนต์</h2></div>
+              <button onClick={() => { setIsEventModalOpen(false); }} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
             </div>
-
             <form onSubmit={handleCreateEventSubmit} className="space-y-5 text-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                 <div className="space-y-3 p-3 bg-black/30 rounded-2xl border" style={{ borderColor: THEME.border }}>
@@ -1167,194 +763,102 @@ export default function MonitorPage() {
                       <button type="button" onClick={() => { if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); } else { setViewMonth(viewMonth + 1); } }} className="p-1 text-xs font-bold text-slate-400 hover:text-white border border-slate-800 rounded bg-black/20">▶</button>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-7 gap-1 text-center font-bold text-[11px] text-slate-400">
-                    {['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => <div key={d}>{d}</div>)}
-                  </div>
-
+                  <div className="grid grid-cols-7 gap-1 text-center font-bold text-[11px] text-slate-400">{['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => <div key={d}>{d}</div>)}</div>
                   <div className="grid grid-cols-7 gap-1 text-center font-mono">
                     {calendarDays.map((day, idx) => {
                       if (!day) return <div key={`empty-${idx}`} />;
                       const checkDateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                       const isSelected = eventDate === checkDateStr;
+                      const ev = eventsMap[checkDateStr];
+                      const isClosed = ev?.event_type === 'closed';
+                      const isConcert = ev?.event_type === 'concert';
 
                       return (
                         <button
                           key={`day-${day}`} type="button" onClick={() => selectDateHandler(day)}
-                          className={`h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center ${isSelected ? 'bg-pink-500 text-white shadow-md' : 'text-gray-200 hover:bg-white/10 border border-transparent'}`}
-                          style={{ backgroundColor: isSelected ? THEME.pink : '' }}
+                          className={`h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center relative ${isSelected ? 'shadow-md' : 'hover:bg-white/10 border border-transparent'}`}
+                          style={{ 
+                            backgroundColor: isSelected ? (isClosed ? '#EF4444' : THEME.pink) : (isClosed ? 'rgba(239,68,68,0.2)' : ''), 
+                            color: isClosed && !isSelected ? '#EF4444' : 'white'
+                          }}
                         >
                           {day}
+                          {isConcert && !isSelected && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-pink-500"></span>}
                         </button>
                       );
                     })}
                   </div>
-
-                  <div className="mt-2 text-center border-t pt-2 text-xs font-medium text-slate-400" style={{ borderColor: THEME.border }}>
-                    วันที่เลือก: {eventDate ? <span className="text-white font-bold underline font-mono">{eventDate}</span> : <span className="text-amber-400">กรุณาคลิกเลือกบนปฏิทิน</span>}
-                  </div>
+                  <div className="mt-2 text-center border-t pt-2 text-xs font-medium text-slate-400" style={{ borderColor: THEME.border }}>วันที่เลือก: {eventDate ? <span className="text-white font-bold underline font-mono">{eventDate}</span> : <span className="text-amber-400">กรุณาคลิกเลือกบนปฏิทิน</span>}</div>
                 </div>
-
                 <div className="space-y-4">
+                  {/* 🟢 ส่วนปุ่มเลือกประเภทของวัน เพิ่มปุ่ม ปิดร้าน */}
                   <div>
-                    <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider text-slate-300">ประเภทของวันกิจกรรม</label>
-                    <div className="grid grid-cols-2 gap-1.5 bg-black/30 p-1 rounded-xl border h-11 items-center" style={{ borderColor: THEME.border }}>
-                      <button type="button" onClick={() => { setEventType('normal'); }} className="h-8 rounded-lg font-bold text-xs transition-all" style={{ backgroundColor: eventType === 'normal' ? THEME.purple : 'transparent', color: 'white' }}>วันปกติ (ฟรี)</button>
-                      <button type="button" onClick={() => { setEventType('concert'); }} className="h-8 rounded-lg font-bold text-xs transition-all" style={{ backgroundColor: eventType === 'concert' ? THEME.pink : 'transparent', color: 'white' }}>🚀 คอนเสิร์ต</button>
+                    <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider text-slate-300">ประเภทของวัน</label>
+                    <div className="grid grid-cols-3 gap-1.5 bg-black/30 p-1 rounded-xl border h-11 items-center" style={{ borderColor: THEME.border }}>
+                      <button type="button" onClick={() => { setEventType('normal'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'normal' ? THEME.purple : 'transparent', color: 'white' }}>วันปกติ (ฟรี)</button>
+                      <button type="button" onClick={() => { setEventType('concert'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'concert' ? THEME.pink : 'transparent', color: 'white' }}>🚀 คอนเสิร์ต</button>
+                      <button type="button" onClick={() => { setEventType('closed'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'closed' ? '#EF4444' : 'transparent', color: 'white' }}>🛑 วันหยุดร้าน</button>
                     </div>
                   </div>
+                  
+                  {/* 🟢 แจ้งเตือนเมื่อเลือกวันหยุดร้าน */}
+                  {eventType === 'closed' && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs leading-relaxed animate-fade-in">
+                      <AlertTriangle size={14} className="inline mr-1" />
+                      ตั้งค่าวางระบบเป็นวันหยุดร้าน ลูกค้าจะไม่สามารถจองคิวออนไลน์ในวันนี้ได้ ระบบจะแจ้งเตือนลูกค้าทันทีเมื่อกดเลือกวันนี้ครับ
+                    </div>
+                  )}
 
                   {eventType === 'concert' && (
                     <div className="space-y-4 pt-1 animate-fade-in">
                       <div className="grid grid-cols-1 gap-3">
-                        <div>
-                          <label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อคอนเสิร์ต / ศิลปิน</label>
-                          <input 
-                            type="text" 
-                            placeholder="e.g. Three Man Down Live" 
-                            value={eventTitle} 
-                            onChange={(e) => { setEventTitle(e.target.value); }} 
-                            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} // 🟢 ดักปุ่ม Enter
-                            className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500" 
-                            style={{ borderColor: THEME.border }} 
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold mb-1 text-gray-300">ราคาค่าบัตรเหมาต่อโต๊ะ (บาท)</label>
-                          <div className="relative flex items-center">
-                            <DollarSign size={15} className="absolute left-3.5 text-amber-400" />
-                            <input 
-                              type="number" 
-                              value={eventPrice} 
-                              onChange={(e) => { setEventPrice(Number(e.target.value)); }} 
-                              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} // 🟢 ดักปุ่ม Enter
-                              className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono" 
-                              style={{ borderColor: THEME.border }} 
-                            />
-                          </div>
-                        </div>
+                        <div><label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อคอนเสิร์ต / ศิลปิน</label><input type="text" placeholder="e.g. Three Man Down Live" value={eventTitle} onChange={(e) => { setEventTitle(e.target.value); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500" style={{ borderColor: THEME.border }} /></div>
+                        <div><label className="block text-xs font-semibold mb-1 text-gray-300">ราคาค่าบัตรเหมาต่อโต๊ะ (บาท)</label><div className="relative flex items-center"><DollarSign size={15} className="absolute left-3.5 text-amber-400" /><input type="number" value={eventPrice} onChange={(e) => { setEventPrice(Number(e.target.value)); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono" style={{ borderColor: THEME.border }} /></div></div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-semibold mb-1 text-gray-300 flex items-center gap-1"><FileText size={13} /> รายละเอียดของแถม</label>
-                        <textarea 
-                          rows={3} 
-                          placeholder="ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." 
-                          value={perksNote} 
-                          onChange={(e) => { setPerksNote(e.target.value); }} 
-                          className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" 
-                          style={{ borderColor: THEME.border }} 
-                        />
-                      </div>
+                      <div><label className="block text-xs font-semibold mb-1 text-gray-300 flex items-center gap-1"><FileText size={13} /> รายละเอียดของแถม</label><textarea rows={3} placeholder="ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." value={perksNote} onChange={(e) => { setPerksNote(e.target.value); }} className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" style={{ borderColor: THEME.border }} /></div>
                     </div>
                   )}
                 </div>
               </div>
-
               {eventType === 'concert' && (
                 <div className="animate-fade-in mt-2">
                   <label className="block text-xs font-semibold mb-1.5 text-gray-300 flex items-center gap-1"><ImageIcon size={13} /> รูปภาพโปสเตอร์ศิลปิน</label>
                   <div className="relative h-48 w-full border border-dashed rounded-xl flex flex-col items-center justify-center bg-black/20 cursor-pointer overflow-hidden group transition-all" style={{ borderColor: THEME.border }}>
                     <input type="file" accept="image/*" onChange={handleImageChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                    {imagePreview ? (
-                      <>
-                        <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center z-0">
-                          <ImageIcon size={24} className="text-white mb-1.5" />
-                          <p className="text-xs font-bold text-white">คลิกเพื่อเปลี่ยนรูปโปสเตอร์</p>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center">
-                        <div className="p-3 bg-pink-500/10 rounded-full mb-2.5"><ImageIcon size={24} className="text-pink-500" /></div>
-                        <p className="text-xs font-bold text-gray-200">คลิกเลือกหรือลากรูปภาพมาวาง</p>
-                      </div>
-                    )}
+                    {imagePreview ? (<><img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center z-0"><ImageIcon size={24} className="text-white mb-1.5" /><p className="text-xs font-bold text-white">คลิกเพื่อเปลี่ยนรูปโปสเตอร์</p></div></>) : (<div className="flex flex-col items-center justify-center"><div className="p-3 bg-pink-500/10 rounded-full mb-2.5"><ImageIcon size={24} className="text-pink-500" /></div><p className="text-xs font-bold text-gray-200">คลิกเลือกหรือลากรูปภาพมาวาง</p></div>)}
                   </div>
                 </div>
               )}
-
-              {eventStatusMsg && (
-                <div className={`p-3 rounded-xl border flex items-center gap-2 text-xs ${eventStatusMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
-                  {eventStatusMsg.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
-                  <span className="font-medium">{eventStatusMsg.text}</span>
-                </div>
-              )}
-
+              {eventStatusMsg && <div className={`p-3 rounded-xl border flex items-center gap-2 text-xs ${eventStatusMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>{eventStatusMsg.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}<span className="font-medium">{eventStatusMsg.text}</span></div>}
               <div className="flex justify-end gap-3 pt-4 font-bold border-t border-slate-800" style={{ borderColor: THEME.border }}>
-                {/* 🟢 ปุ่มยกเลิก ซ่อน/โชว์ อัตโนมัติตามข้อมูลในฐานข้อมูล */}
-                {eventsMap[eventDate] && (
-                  <button 
-                    type="button" 
-                    disabled={eventLoading || !eventDate}
-                    onClick={handleCancelConcert} 
-                    className="mr-auto px-4 py-2.5 text-xs rounded-xl border transition-all active:scale-95 bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    ยกเลิกงานวันนี้
-                  </button>
-                )}
-                
+                {eventsMap[eventDate] && <button type="button" disabled={eventLoading || !eventDate} onClick={handleCancelConcert} className="mr-auto px-4 py-2.5 text-xs rounded-xl border transition-all active:scale-95 bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed">ยกเลิกการตั้งค่าวันนี้</button>}
                 <button type="button" onClick={() => { setIsEventModalOpen(false); }} className="px-5 py-2.5 text-xs rounded-xl border text-white border-slate-700 hover:bg-white/5 transition-colors">ปิดหน้าต่าง</button>
-                
-                <button type="submit" disabled={eventLoading} className="px-5 py-2.5 text-xs rounded-xl text-black flex items-center gap-1.5 font-bold transition-all disabled:opacity-70" style={{ backgroundColor: THEME.gold }}>
-                  {eventLoading ? <Loader2 size={14} className="animate-spin" /> : null} อัปเดตโหมดปฏิทิน
-                </button>
+                <button type="submit" disabled={eventLoading} className="px-5 py-2.5 text-xs rounded-xl text-black flex items-center gap-1.5 font-bold transition-all disabled:opacity-70" style={{ backgroundColor: THEME.gold }}>{eventLoading ? <Loader2 size={14} className="animate-spin" /> : null} อัปเดตโหมดปฏิทิน</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal รายงานปัญหา */}
       {isReportModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-all">
           <div className="w-full max-w-md rounded-2xl p-6 border" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle style={{ color: THEME.gold }} size={20} />
-              <h2 className="text-xl font-bold tracking-tight text-white">รายงานปัญหาคิวจองระบบ</h2>
-            </div>
+            <div className="flex items-center gap-2 mb-4"><AlertTriangle style={{ color: THEME.gold }} size={20} /><h2 className="text-xl font-bold tracking-tight text-white">รายงานปัญหาคิวจองระบบ</h2></div>
             <form onSubmit={handleSendReport} className="space-y-4 text-sm">
-              <div>
-                <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">สาขาที่รายงาน</label>
-                <div className="w-full px-3 py-2.5 rounded-xl border text-sm font-bold bg-black/40 text-slate-400 border-slate-800" style={{ borderColor: THEME.border }}>🏢 {shopName}</div>
-              </div>
-              <div>
-                <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">ประเภทปัญหา</label>
-                <div className="relative flex items-center rounded-xl bg-black/40 border" style={{ borderColor: THEME.border }}>
-                  <select value={reportForm.issueType} onChange={e => setReportForm({...reportForm, issueType: e.target.value})} className="w-full cursor-pointer appearance-none bg-transparent py-2.5 pl-3 pr-10 text-sm outline-none text-white">
-                    <option value="UI Bug / หน้าเว็บเพี้ยน" style={{ backgroundColor: THEME.card }}>UI Bug / หน้าเว็บเพี้ยน</option>
-                    <option value="ระบบจองขัดข้อง" style={{ backgroundColor: THEME.card }}>ระบบจองขัดข้อง</option>
-                    <option value="ข้อมูลไม่ตรงความเป็นจริง" style={{ backgroundColor: THEME.card }}>ข้อมูลไม่ตรงความเป็นจริง</option>
-                    <option value="อื่นๆ" style={{ backgroundColor: THEME.card }}>อื่นๆ</option>
-                  </select>
-                  <ChevronDown size={16} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">รายละเอียดของปัญหา</label>
-                <textarea rows={4} required value={reportForm.details} onChange={e => setReportForm({...reportForm, details: e.target.value})} placeholder="กรุณาระบุสิ่งที่เกิดขึ้นอย่างละเอียด..." className="w-full px-3 py-2.5 rounded-xl border outline-none text-sm bg-black/20 resize-none text-white" style={{ borderColor: THEME.border }} />
-              </div>
-              <div className="flex justify-end gap-3 pt-2 font-bold">
-                <button type="button" onClick={() => { setIsReportModalOpen(false); }} className="px-4 py-2 text-xs rounded-xl border hover:bg-white/5 transition-all text-white border-slate-700">ยกเลิก</button>
-                <button type="submit" disabled={isSendingReport} className="px-4 py-2 text-xs rounded-xl transition-all active:scale-95 disabled:opacity-50 text-black font-bold" style={{ backgroundColor: THEME.mint }}>🚀 ส่งข้อมูล</button>
-              </div>
+              <div><label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">สาขาที่รายงาน</label><div className="w-full px-3 py-2.5 rounded-xl border text-sm font-bold bg-black/40 text-slate-400 border-slate-800" style={{ borderColor: THEME.border }}>🏢 {shopName}</div></div>
+              <div><label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">ประเภทปัญหา</label><div className="relative flex items-center rounded-xl bg-black/40 border" style={{ borderColor: THEME.border }}><select value={reportForm.issueType} onChange={e => setReportForm({...reportForm, issueType: e.target.value})} className="w-full cursor-pointer appearance-none bg-transparent py-2.5 pl-3 pr-10 text-sm outline-none text-white"><option value="UI Bug / หน้าเว็บเพี้ยน" style={{ backgroundColor: THEME.card }}>UI Bug / หน้าเว็บเพี้ยน</option><option value="ระบบจองขัดข้อง" style={{ backgroundColor: THEME.card }}>ระบบจองขัดข้อง</option><option value="ข้อมูลไม่ตรงความเป็นจริง" style={{ backgroundColor: THEME.card }}>ข้อมูลไม่ตรงความเป็นจริง</option><option value="อื่นๆ" style={{ backgroundColor: THEME.card }}>อื่นๆ</option></select><ChevronDown size={16} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} /></div></div>
+              <div><label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">รายละเอียดของปัญหา</label><textarea rows={4} required value={reportForm.details} onChange={e => setReportForm({...reportForm, details: e.target.value})} placeholder="กรุณาระบุสิ่งที่เกิดขึ้นอย่างละเอียด..." className="w-full px-3 py-2.5 rounded-xl border outline-none text-sm bg-black/20 resize-none text-white" style={{ borderColor: THEME.border }} /></div>
+              <div className="flex justify-end gap-3 pt-2 font-bold"><button type="button" onClick={() => { setIsReportModalOpen(false); }} className="px-4 py-2 text-xs rounded-xl border hover:bg-white/5 transition-all text-white border-slate-700">ยกเลิก</button><button type="submit" disabled={isSendingReport} className="px-4 py-2 text-xs rounded-xl transition-all active:scale-95 disabled:opacity-50 text-black font-bold" style={{ backgroundColor: THEME.mint }}>🚀 ส่งข้อมูล</button></div>
             </form>
           </div>
         </div>
       )}
 
       <style jsx global>{`
-        .custom-date-hide-icon::-webkit-calendar-picker-indicator {
-          background: transparent;
-          bottom: 0;
-          color: transparent;
-          cursor: pointer;
-          height: auto;
-          left: 0;
-          position: absolute;
-          right: 0;
-          top: 0;
-          width: auto;
-        }
+        .custom-date-hide-icon::-webkit-calendar-picker-indicator { background: transparent; bottom: 0; color: transparent; cursor: pointer; height: auto; left: 0; position: absolute; right: 0; top: 0; width: auto; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.1); border-radius: 10px; }
       `}</style>
     </div>
   );
@@ -1363,13 +867,8 @@ export default function MonitorPage() {
 function StatPill({ icon: Icon, label, value, accent }: { icon: LucideIcon; label: string; value: string | number; accent: string }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl px-4 py-3.5 bg-black/20 border" style={{ borderColor: THEME.border }}>
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${accent}15`, color: accent }}>
-        <Icon size={18} />
-      </div>
-      <div className="min-w-0">
-        <p className="truncate font-mono text-[10px] uppercase tracking-widest" style={{ color: THEME.muted }}>{label}</p>
-        <p className="text-xl sm:text-2xl font-bold leading-tight text-white mt-0.5">{value}</p>
-      </div>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${accent}15`, color: accent }}><Icon size={18} /></div>
+      <div className="min-w-0"><p className="truncate font-mono text-[10px] uppercase tracking-widest" style={{ color: THEME.muted }}>{label}</p><p className="text-xl sm:text-2xl font-bold leading-tight text-white mt-0.5">{value}</p></div>
     </div>
   );
 }
@@ -1377,11 +876,13 @@ function StatPill({ icon: Icon, label, value, accent }: { icon: LucideIcon; labe
 function BookingCard({ 
   booking, 
   eventPrice,
-  onUpdateStatus 
+  onUpdateStatus,
+  onViewSlip 
 }: { 
   booking: any;
   eventPrice: number;
   onUpdateStatus: (id: string, nextStatus: 'confirmed' | 'checked_in' | 'no_show') => Promise<void>;
+  onViewSlip: (b: any) => void;
 }) {
   const zone = zoneOf(booking.table_number);
   const derived = deriveStatus(booking);
@@ -1390,117 +891,45 @@ function BookingCard({
   const totalPaidForThisBooking = eventPrice;
 
   return (
-    <div
-      className="group relative overflow-hidden rounded-2xl p-5 transition-all hover:-translate-y-0.5 flex flex-col justify-between min-h-[230px]"
-      style={{ 
-        backgroundColor: THEME.card, 
-        border: booking.status === 'checked_in' 
-          ? '1px solid rgba(0, 245, 212, 0.3)' 
-          : booking.status === 'pending'
-            ? `1px solid ${THEME.amber}` 
-            : booking.status === 'no_show' 
-              ? '1px solid rgba(239, 68, 68, 0.2)' 
-              : `1px solid ${THEME.border}`,
-        opacity: booking.status === 'no_show' || derived === 'past' ? 0.4 : 1
-      }}
-    >
-      <div>
+    <div className="group relative overflow-hidden rounded-2xl transition-all hover:-translate-y-0.5 flex flex-col justify-between min-h-[230px]" style={{ backgroundColor: THEME.card, border: booking.status === 'checked_in' ? '1px solid rgba(0, 245, 212, 0.3)' : booking.status === 'pending' ? `1px solid ${THEME.amber}` : booking.status === 'no_show' ? '1px solid rgba(239, 68, 68, 0.2)' : `1px solid ${THEME.border}`, opacity: booking.status === 'no_show' || derived === 'past' ? 0.4 : 1 }}>
+      <div className="p-5 flex-1 cursor-pointer hover:bg-white/[0.02] transition-colors" onClick={() => onViewSlip(booking)} title="คลิกเพื่อดูรายละเอียดการจองและรูปสลิป">
         <div className="absolute left-0 top-0 h-full w-1" style={{ backgroundColor: booking.status === 'pending' ? THEME.amber : zone.accent }} />
-
-        <div className="flex items-start justify-between">
-          <div
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-mono text-xs font-bold"
-            style={{ backgroundColor: `${zone.accent}1A`, color: zone.accent }}
-          >
-            <zone.icon size={13} />
-            {booking.table_number}
-          </div>
-
+        <div className="flex items-start justify-between relative">
+          <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-mono text-xs font-bold" style={{ backgroundColor: `${zone.accent}1A`, color: zone.accent }}><zone.icon size={13} />{booking.table_number}</div>
           <div className="flex items-center gap-1.5">
-            <span
-              className={`h-2 w-2 rounded-full ${booking.status === 'pending' ? 'animate-ping' : ''}`}
-              style={{
-                backgroundColor: currentMeta.dot,
-                boxShadow: (derived === 'tonight' || booking.status === 'pending') ? `0 0 10px ${currentMeta.dot}` : 'none',
-              }}
-            />
-            <span className="font-mono text-[10px] font-bold tracking-widest" style={{ color: currentMeta.color }}>
-              {currentMeta.label}
-            </span>
+            <span className={`h-2 w-2 rounded-full ${booking.status === 'pending' ? 'animate-ping' : ''}`} style={{ backgroundColor: currentMeta.dot, boxShadow: (derived === 'tonight' || booking.status === 'pending') ? `0 0 10px ${currentMeta.dot}` : 'none' }} />
+            <span className="font-mono text-[10px] font-bold tracking-widest" style={{ color: currentMeta.color }}>{currentMeta.label}</span>
           </div>
         </div>
-
-        <h3 className="mt-4 truncate text-lg font-bold text-white">{booking.customer_name}</h3>
-
+        <h3 className="mt-4 truncate text-lg font-bold text-white pr-6 relative">{booking.customer_name}<div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400"><Eye size={16} /></div></h3>
         <div className="mt-1 flex items-center justify-between font-mono text-xs" style={{ color: zone.accent }}>
           <span className="flex items-center gap-1.5"><Hash size={12} /> {booking.booking_code}</span>
-          {eventPrice > 0 && booking.status !== 'pending' && (
-            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-sans">
-              Paid: {totalPaidForThisBooking.toLocaleString()} ฿
-            </span>
-          )}
+          {eventPrice > 0 && booking.status !== 'pending' && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-sans">Paid: {totalPaidForThisBooking.toLocaleString()} ฿</span>}
         </div>
-
         <div className="mt-4 grid grid-cols-2 gap-y-2.5 text-sm" style={{ color: THEME.muted }}>
           <DetailRow icon={CalendarDays} value={booking.booking_date} />
-          
-          <DetailRow 
-            icon={Clock} 
-            value={
-              booking.booking_time?.includes('19:00') || booking.booking_time === '19:00:00'
-                ? '19:00 - 23:00' 
-                : (booking.booking_time || '').slice(0, 5)
-            } 
-          />
-          
+          <DetailRow icon={Clock} value={booking.booking_time?.includes('19:00') || booking.booking_time === '19:00:00' ? '19:00 - 23:00' : (booking.booking_time || '').slice(0, 5)} />
           <DetailRow icon={Users} value={`${booking.guests_count} ท่าน`} />
           <DetailRow icon={Phone} value={booking.phone} />
         </div>
       </div>
-
-      <div className="mt-5 pt-3 flex gap-2 border-t" style={{ borderColor: THEME.border }}>
-        {booking.status === 'pending' ? (
-          <button
-            type="button"
-            onClick={() => onUpdateStatus(booking.id, 'confirmed')}
-            className="w-full py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 text-black hover:opacity-90"
-            style={{ backgroundColor: THEME.gold, boxShadow: `0 2px 10px rgba(229, 184, 66, 0.15)` }}
-          >
-            <Check size={14} className="stroke-[3]" />
-            ยืนยันรับยอดเงินสำเร็จ
-          </button>
-        ) : (!booking.status || booking.status === 'confirmed') && derived !== 'past' ? (
-          <>
-            <button
-              type="button"
-              onClick={() => onUpdateStatus(booking.id, 'checked_in')}
-              className="flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black text-emerald-400"
-            >
-              <Check size={14} />
-              เช็คอินเข้าร้าน
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateStatus(booking.id, 'no_show')}
-              className="flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400"
-            >
-              <X size={14} />
-              No Show
-            </button>
-          </>
-        ) : null}
+      <div className="px-5 pb-5 pt-0">
+        <div className="pt-3 flex gap-2 border-t" style={{ borderColor: THEME.border }}>
+          {booking.status === 'pending' ? (
+            <button type="button" onClick={() => onViewSlip(booking)} className="w-full py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 text-black hover:opacity-90" style={{ backgroundColor: THEME.gold, boxShadow: `0 2px 10px rgba(229, 184, 66, 0.15)` }}><Eye size={14} className="stroke-[3]" />ตรวจสอบสลิปและยืนยัน</button>
+          ) : (!booking.status || booking.status === 'confirmed') && derived !== 'past' ? (
+            <><button type="button" onClick={() => onUpdateStatus(booking.id, 'checked_in')} className="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black text-emerald-400"><Check size={14} />เช็คอินเข้าร้าน</button><button type="button" onClick={() => onUpdateStatus(booking.id, 'no_show')} className="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400"><X size={14} />No Show</button></>
+          ) : (
+            <button type="button" onClick={() => onViewSlip(booking)} className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 bg-black/20 hover:bg-white/10 text-gray-400 border border-slate-800"><Eye size={14} />ดูรายละเอียด / สลิป</button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 function DetailRow({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
-  return (
-    <div className="flex items-center gap-2 truncate">
-      <Icon size={14} className="shrink-0 text-slate-600" />
-      <span className="truncate text-gray-200">{value || '—'}</span>
-    </div>
-  );
+  return <div className="flex items-center gap-2 truncate"><Icon size={14} className="shrink-0 text-slate-600" /><span className="truncate text-gray-200">{value || '—'}</span></div>;
 }
 
 function LoadingGrid() {
@@ -1508,15 +937,9 @@ function LoadingGrid() {
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="flex h-44 animate-pulse flex-col justify-between rounded-2xl p-5 bg-slate-900 border border-slate-800">
-          <div className="flex justify-between">
-            <div className="h-6 w-16 rounded bg-slate-800" />
-            <div className="h-4 w-20 rounded bg-slate-800" />
-          </div>
+          <div className="flex justify-between"><div className="h-6 w-16 rounded bg-slate-800" /><div className="h-4 w-20 rounded bg-slate-800" /></div>
           <div className="h-6 w-2/3 rounded bg-slate-800" />
-          <div className="grid grid-cols-2 gap-2">
-            <div className="h-4 rounded bg-slate-800" />
-            <div className="h-4 rounded bg-slate-800" />
-          </div>
+          <div className="grid grid-cols-2 gap-2"><div className="h-4 rounded bg-slate-800" /><div className="h-4 rounded bg-slate-800" /></div>
         </div>
       ))}
     </div>
@@ -1526,13 +949,8 @@ function LoadingGrid() {
 function EmptyState({ hasBookings }: { hasBookings: boolean }) {
   return (
     <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 rounded-2xl px-6 py-16 text-center" style={{ backgroundColor: THEME.card, border: `1px dashed ${THEME.border}` }}>
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/40" style={{ color: THEME.pink }}>
-        {hasBookings ? <Search size={28} /> : <Inbox size={28} />}
-      </div>
-      <div>
-        <p className="text-lg font-bold text-white">{hasBookings ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีรายการจองในระบบ'}</p>
-        <p className="mt-1 text-sm" style={{ color: THEME.muted }}>{hasBookings ? 'ลองปรับคำค้นหา เปิดสวิตช์ประวัติย้อนหลัง หรือเปลี่ยนโซนที่นั่งดูอีกครั้ง' : 'รายการจองใหม่จะปรากฏที่นี่โดยอัตโนมัติ'}</p>
-      </div>
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/40" style={{ color: THEME.pink }}>{hasBookings ? <Search size={28} /> : <Inbox size={28} />}</div>
+      <div><p className="text-lg font-bold text-white">{hasBookings ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีรายการจองในระบบ'}</p><p className="mt-1 text-sm" style={{ color: THEME.muted }}>{hasBookings ? 'ลองปรับคำค้นหา เปิดสวิตช์ประวัติย้อนหลัง หรือเปลี่ยนโซนที่นั่งดูอีกครั้ง' : 'รายการจองใหม่จะปรากฏที่นี่โดยอัตโนมัติ'}</p></div>
     </div>
   );
 }
