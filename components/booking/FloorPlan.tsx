@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client' 
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
-import { Layers } from 'lucide-react'
+import { Layers, Info } from 'lucide-react'
 
 interface TableData {
   id: string;
@@ -136,7 +136,6 @@ export default function FloorPlan({
     fetchTables()
   }, [])
 
-  // 🎨 อัปเดตตรรกะระบบสี: เพิ่มเงื่อนไขให้ห้อง VIP เป็นสีม่วง 
   const getTableStyle = (tableId: string) => {
     const dayStatus = dayTables[tableId];
     if (dayStatus === 'booked') return 'fill-red-500/90 stroke-red-700 cursor-not-allowed';
@@ -146,24 +145,29 @@ export default function FloorPlan({
     const current = tables[tableId];
     if (current && current.status === 'broken') return 'fill-slate-800 stroke-slate-700 cursor-not-allowed opacity-40';
     
-    // 🟣 ถ้าเป็นห้อง VIP (รหัสขึ้นต้นด้วย 'V') โชว์สีม่วงพรีเมียม
     if (tableId.startsWith('V')) {
       return 'fill-purple-500 hover:fill-purple-400 stroke-purple-800 cursor-pointer transition-all';
     }
 
-    // 🟢 โต๊ะปกติสีเขียวมรกต
     return 'fill-emerald-500 hover:fill-emerald-400 stroke-emerald-700 cursor-pointer transition-all';
   }
 
   const handleTableClick = (tableId: string) => {
     if (dayTables[tableId] === 'booked' || dayTables[tableId] === 'pending' || tables[tableId]?.status === 'broken') return;
-    if (onTableClick) { onTableClick(tableId); return; }
-    if (setSelectedTables) {
-      setSelectedTables((prev) => {
-        if (prev.includes(tableId)) return prev.filter((id) => id !== tableId);
-        return [...prev, tableId];
-      });
-    }
+    
+    // หน่วงเวลาให้ React ไม่ตีกับระบบ Panning 
+    setTimeout(() => {
+      if (onTableClick) { 
+        onTableClick(tableId); 
+        return; 
+      }
+      if (setSelectedTables) {
+        setSelectedTables((prev) => {
+          if (prev.includes(tableId)) return prev.filter((id) => id !== tableId);
+          return [...prev, tableId];
+        });
+      }
+    }, 100); 
   }
 
   return (
@@ -187,7 +191,26 @@ export default function FloorPlan({
         </button>
       </div>
 
-      <TransformWrapper initialScale={1} minScale={0.7} maxScale={4} centerOnInit={true} wheel={{ disabled: false }} limitToBounds={false}>
+      {/* 💡 ป้ายคำอธิบายบนแผนที่ ให้ลูกค้ารู้ว่าต้องซูมยังไง */}
+      <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center pointer-events-none">
+        <div className="bg-slate-950/80 border border-slate-800/80 px-4 py-2 rounded-full backdrop-blur-md shadow-xl flex items-center gap-2">
+          <Info size={14} className="text-cyan-400" />
+          <span className="text-[10px] sm:text-xs text-slate-300 font-medium tracking-wide">
+            ซูมแผนที่: กดปุ่ม <span className="text-cyan-400 font-bold">+/-</span> หรือ <span className="text-cyan-400 font-bold">ถ่าง 2 นิ้ว</span>
+          </span>
+        </div>
+      </div>
+
+      {/* 🛑 อัปเดตตั้งค่า: ปิดสกอร์เมาส์ 100% (wheel: disabled: true) */}
+      <TransformWrapper 
+        initialScale={1} 
+        minScale={0.7} 
+        maxScale={4} 
+        centerOnInit={true} 
+        wheel={{ disabled: true }} // ปิดการซูมด้วยลูกกลิ้งเมาส์
+        limitToBounds={true}
+        panning={{ velocityDisabled: true }} 
+      >
         {({ zoomIn, zoomOut, resetTransform }) => (
           <>
             <div className="absolute top-3 right-3 z-30 flex flex-col gap-1 bg-slate-950/80 border border-slate-800 p-1 rounded-xl backdrop-blur-md">
@@ -290,13 +313,17 @@ export default function FloorPlan({
                       </g>
                     </g>
 
-                    {/* เรนเดอร์จุดเก้าอี้และสถานะของชั้น 1 */}
+                    {/* ✅ เรนเดอร์โต๊ะชั้น 1 ล้าง Event ขยะออกให้หมด */}
                     {FLOOR_1_TABLES.map((t) => (
-                      <g key={t.id} className="select-none cursor-pointer">
+                      <g 
+                        key={t.id} 
+                        className="select-none cursor-pointer"
+                        onClick={() => handleTableClick(t.id)}
+                      >
                         {t.type === 'circle' ? (
-                          <circle cx={t.cx} cy={t.cy} r={t.r} className={`${getTableStyle(t.id)} transition-colors duration-150`} onClick={() => handleTableClick(t.id)} />
+                          <circle cx={t.cx} cy={t.cy} r={t.r} className={`${getTableStyle(t.id)} transition-colors duration-150`} />
                         ) : (
-                          <rect x={t.x} y={t.y} width={t.w} height={t.h} rx="4" className={`${getTableStyle(t.id)} transition-colors duration-150`} onClick={() => handleTableClick(t.id)} />
+                          <rect x={t.x} y={t.y} width={t.w} height={t.h} rx="4" className={`${getTableStyle(t.id)} transition-colors duration-150`} />
                         )}
                         <text 
                           x={t.type === 'circle' ? t.cx : t.x! + (t.w! / 2)} 
@@ -327,10 +354,14 @@ export default function FloorPlan({
                     <rect x="360.4" y="179" width="19" height="7" fill="#1F2937" />
                     <rect x="382.4" y="179" width="19" height="7" fill="#1F2937" />
 
-                    {/* เรนเดอร์โต๊ะชั้น 2 */}
+                    {/* ✅ เรนเดอร์โต๊ะชั้น 2 ล้าง Event ขยะออกให้หมด */}
                     {FLOOR_2_TABLES.map((t) => (
-                      <g key={t.id} className="select-none cursor-pointer">
-                        <rect x={t.x} y={t.y} width={t.w} height={t.h} rx="4" className={`${getTableStyle(t.id)} transition-colors duration-150`} onClick={() => handleTableClick(t.id)} />
+                      <g 
+                        key={t.id} 
+                        className="select-none cursor-pointer"
+                        onClick={() => handleTableClick(t.id)}
+                      >
+                        <rect x={t.x} y={t.y} width={t.w} height={t.h} rx="4" className={`${getTableStyle(t.id)} transition-colors duration-150`} />
                         <text 
                           x={t.x! + (t.w! / 2)} 
                           y={t.y! + (t.h! / 2) + 3} 

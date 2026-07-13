@@ -5,12 +5,10 @@ import { useParams, notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { jsPDF as PDFInstance } from 'jspdf';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTriangle, ChevronDown, QrCode, ArrowRight, Plus, Minus, X, Music } from 'lucide-react';
+import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTriangle, ChevronDown, QrCode, ArrowRight, Plus, Minus, X, Music, ClipboardCheck } from 'lucide-react';
 import FloorPlan from '@/components/booking/FloorPlan';
 
-// 🟢 ระบุหมายเลขพร้อมเพย์ของร้าน
 const SHOP_PROMPTPAY_ID = '0922657200'; 
-// 🟢 กำหนดวันที่เริ่มเข้มงวดการตรวจคิว
 const ENFORCE_CHECK_DATE = '2026-07-10';
 
 interface BookingRecord {
@@ -47,9 +45,12 @@ export default function BookingPage() {
   const [errorMessage, setErrorMessage] = useState('');
   
   const [showConcertModal, setShowConcertModal] = useState(false);
-  const [concertEvent, setConcertEvent] = useState<any>(null);
-
   const [showConcertListModal, setShowConcertListModal] = useState(false);
+  
+  // 🟢 State ใหม่: สำหรับโชว์หน้าต่างยืนยันข้อมูลก่อนจ่ายเงิน
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  const [concertEvent, setConcertEvent] = useState<any>(null);
   const [upcomingConcerts, setUpcomingConcerts] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(false);
@@ -79,9 +80,6 @@ export default function BookingPage() {
     setShowErrorModal(true);
   };
 
-  // ----------------------------------------------------
-  // 🛠️ LOGIC: คำนวณวันปัจจุบันและจำกัด 15 วันล่วงหน้า (ล็อก Timezone ไทย)
-  // ----------------------------------------------------
   const getBKKDate = useCallback((addDays = 0) => {
     const d = new Date();
     const bkkTime = new Date(d.toLocaleString("en-US", {timeZone: "Asia/Bangkok"}));
@@ -95,30 +93,19 @@ export default function BookingPage() {
   const todayStr = getBKKDate(0);
   const maxDateStr = getBKKDate(15);
 
-  // ----------------------------------------------------
-  // 🛠️ LOGIC: เช็กเงื่อนไขเวลาเกิน 19:00 น. ของวันปัจจุบัน
-  // ----------------------------------------------------
   const handleDateSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.value;
-    
-    if (!selected) {
-      setBookingDate('');
-      return;
-    }
+    if (!selected) { setBookingDate(''); return; }
 
     if (selected === todayStr) {
-      // ดึงเวลาชั่วโมงปัจจุบันของไทย
       const currentHourStr = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Bangkok', hour12: false, hour: 'numeric' });
       const currentHour = parseInt(currentHourStr, 10);
-
-      // ถ้าเกิน 19:00 น. ห้ามจองของวันนี้
       if (currentHour >= 19) {
         triggerError('ไม่สามารถจองในเวลาดังกล่าวได้ ติดต่อทางร้านเพื่อทำการจองคิว');
         setBookingDate(''); 
         return;
       }
     }
-    
     setBookingDate(selected);
   };
 
@@ -126,41 +113,21 @@ export default function BookingPage() {
     let active = true;
     const checkShopStatus = async () => {
       try {
-        const { data, error } = await supabase
-          .from('shop_settings')
-          .select('is_booking_open')
-          .eq('shop_id', shopSlug)
-          .single();
-        if (error && error.code === 'PGRST116') {
-          if (active) setShopExists(false);
-          return;
-        }
+        const { data, error } = await supabase.from('shop_settings').select('is_booking_open').eq('shop_id', shopSlug).single();
+        if (error && error.code === 'PGRST116') { if (active) setShopExists(false); return; }
         if (error) throw error;
         if (active) setIsShopOpen(data ? data.is_booking_open : true);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        if (active) setCheckingStatus(false);
-      }
+      } catch (err) { console.error(err); } finally { if (active) setCheckingStatus(false); }
     };
     checkShopStatus();
   }, [shopSlug]);
 
   useEffect(() => {
     const fetchUpcomingConcerts = async () => {
-      const { data } = await supabase
-        .from('shop_events')
-        .select('*')
-        .eq('shop_id', shopSlug)
-        .gte('event_date', todayStr)
-        .order('event_date', { ascending: true });
-      
+      const { data } = await supabase.from('shop_events').select('*').eq('shop_id', shopSlug).gte('event_date', todayStr).order('event_date', { ascending: true });
       if (data) {
         setUpcomingConcerts(data.filter((e: any) => e.event_type === 'concert'));
-        const mapped = data.reduce((acc, curr: any) => ({
-          ...acc,
-          [curr.event_date]: curr
-        }), {} as Record<string, any>);
+        const mapped = data.reduce((acc, curr: any) => ({ ...acc, [curr.event_date]: curr }), {} as Record<string, any>);
         setEventsMap(mapped);
       }
     };
@@ -170,7 +137,6 @@ export default function BookingPage() {
   useEffect(() => {
     if (!bookingDate) return;
     const eventData = eventsMap[bookingDate];
-    
     if (eventData && eventData.event_type === 'concert') {
       setConcertEvent(eventData);
       setShowConcertModal(true); 
@@ -184,24 +150,13 @@ export default function BookingPage() {
   const fetchTodayBookings = useCallback(async (targetDate: string) => {
     if (!targetDate) return;
     try {
-      const { data, error } = await supabase
-        .from('restaurant_bookings')
-        .select('table_number, status')
-        .eq('shop_id', shopSlug)
-        .eq('booking_date', targetDate)
-        .neq('status', 'no_show');
-
+      const { data, error } = await supabase.from('restaurant_bookings').select('table_number, status').eq('shop_id', shopSlug).eq('booking_date', targetDate).neq('status', 'no_show');
       if (error) throw error;
       if (data) {
-        const statusMap = data.reduce((acc, curr: any) => ({
-          ...acc,
-          [curr.table_number]: curr.status === 'pending' ? 'pending' : 'booked'
-        }), {} as Record<string, 'booked' | 'pending'>);
+        const statusMap = data.reduce((acc, curr: any) => ({ ...acc, [curr.table_number]: curr.status === 'pending' ? 'pending' : 'booked' }), {} as Record<string, 'booked' | 'pending'>);
         setDayTables(statusMap);
       }
-    } catch (err) {
-      console.error('Failed to fetch day bookings:', err);
-    }
+    } catch (err) { console.error('Failed to fetch day bookings:', err); }
   }, [shopSlug]);
 
   useEffect(() => {
@@ -209,28 +164,19 @@ export default function BookingPage() {
     let active = true;
     fetchTodayBookings(bookingDate);
 
-    const realtimeChannel = supabase
-      .channel(`realtime-day-status:${shopSlug}:${bookingDate}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'restaurant_bookings', filter: `shop_id=eq.${shopSlug}` },
-        (payload: any) => {
-          if (!active) return;
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            if (payload.new.booking_date === bookingDate) {
-              setDayTables(prev => {
-                const nextState = { ...prev };
-                if (payload.new.status === 'no_show') {
-                  delete nextState[payload.new.table_number];
-                } else {
-                  nextState[payload.new.table_number] = payload.new.status === 'pending' ? 'pending' : 'booked';
-                }
-                return nextState;
-              });
-            }
-          }
+    const realtimeChannel = supabase.channel(`realtime-day-status:${shopSlug}:${bookingDate}`).on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_bookings', filter: `shop_id=eq.${shopSlug}` }, (payload: any) => {
+      if (!active) return;
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        if (payload.new.booking_date === bookingDate) {
+          setDayTables(prev => {
+            const nextState = { ...prev };
+            if (payload.new.status === 'no_show') { delete nextState[payload.new.table_number]; } 
+            else { nextState[payload.new.table_number] = payload.new.status === 'pending' ? 'pending' : 'booked'; }
+            return nextState;
+          });
         }
-      ).subscribe();
+      }
+    }).subscribe();
 
     return () => { active = false; supabase.removeChannel(realtimeChannel); };
   }, [bookingDate, fetchTodayBookings, shopSlug]);
@@ -240,10 +186,10 @@ export default function BookingPage() {
     setGuestsCount(4);
   }, [bookingDate]);
 
-  const handleBooking = async (e: React.FormEvent) => {
+  // 🟢 STEP 1: ตรวจสอบความถูกต้อง แล้วโชว์หน้าต่างยืนยัน (Pre-Booking)
+  const handlePreBooking = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !phone.trim() || !bookingDate || selectedTables.length === 0) return;
-
     if (!isShopOpen) { triggerError('ขออภัยครับขณะนี้ระบบรับคิวจองออนไลน์ปิดชั่วคราวแล้วครับ'); return; }
 
     const isAnyTableUnavailable = selectedTables.some(t => dayTables[t] === 'booked' || dayTables[t] === 'pending');
@@ -257,13 +203,22 @@ export default function BookingPage() {
       setGuestsCount(4); return;
     }
 
-    setLoading(true);
+    // เซ็ตราคาสำหรับสรุปยอด
+    const eventData = eventsMap[bookingDate];
+    setCurrentEventPrice(eventData?.price || 0);
+
+    // ข้อมูลครบถ้วน เปิด Modal ยืนยันข้อมูล
+    setShowConfirmModal(true);
+  };
+
+  // 🟢 STEP 2: เมื่อลูกค้ายืนยันข้อมูลแล้ว บันทึกลงฐานข้อมูลจริง
+  const executeBooking = async () => {
+    setShowConfirmModal(false); // ปิดหน้าต่างยืนยัน
+    setLoading(true); // เริ่มกระบวนการโหลด
+
     try {
       const eventData = eventsMap[bookingDate];
       const isConcertDay = eventData?.event_type === 'concert';
-      const eventPricePerTable = eventData?.price || 0;
-      setCurrentEventPrice(eventPricePerTable);
-
       const statusToSet = (isConcertDay && bookingDate >= ENFORCE_CHECK_DATE) ? 'pending' : 'confirmed';
       const randomCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -310,11 +265,13 @@ export default function BookingPage() {
           });
         } catch (lineErr) { console.error('LINE notification failed:', lineErr); }
 
-        setShowModal(true); 
+        setShowModal(true); // เปิดหน้าจอสำเร็จ (แสดง QR)
       }
     } catch (err) {
       console.error(err); triggerError('ระบบเชื่อมโยงข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง');
-    } finally { setLoading(false); }
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleDownloadPDF = () => {
@@ -406,7 +363,7 @@ export default function BookingPage() {
               </div>
             </div>
           ) : (
-            <form onSubmit={handleBooking} className="space-y-5 text-base w-full">
+            <form onSubmit={handlePreBooking} className="space-y-5 text-base w-full">
               
               {upcomingConcerts.length > 0 && (
                 <button type="button" onClick={() => setShowConcertListModal(true)} className="w-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-xl p-3 flex items-center justify-between hover:bg-pink-500/30 transition-all group">
@@ -418,7 +375,6 @@ export default function BookingPage() {
                 </button>
               )}
 
-              {/* 🟢 STEP 1: วันที่ (โชว์เสมอเป็นตัวนำ) */}
               <div className="w-full bg-black/30 p-4 rounded-2xl border" style={{ borderColor: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? THEME.pink : `${THEME.gold}20` }}>
                 <div className="space-y-2 w-full min-w-0">
                   <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 font-mono" style={{ color: THEME.gold }}>
@@ -445,7 +401,6 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              {/* 🟢 CONDITIONAL UI: ถ้ายังไม่เลือกวัน ให้โชว์การ์ดเงื่อนไข / ถ้าเลือกแล้วโชว์ฟอร์มที่เหลือ */}
               {!bookingDate ? (
                 <div className="mt-4 p-5 sm:p-6 bg-[#0D1424] border border-[#1E293B] rounded-2xl space-y-5 shadow-lg w-full">
                   <div className="space-y-3">
@@ -456,35 +411,28 @@ export default function BookingPage() {
                       <li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> ปิดรับจองโต๊ะเวลา 19:00 น. ของทุกวัน</li>
                     </ul>
                   </div>
-                  
                   <div className="w-full h-px bg-[#1E293B]"></div>
-                  
                   <div className="space-y-3">
                     <h4 className="text-purple-400 font-bold text-base text-center tracking-wide">เงื่อนไขการปล่อยโต๊ะ</h4>
                     <ul className="text-slate-300 space-y-2 text-sm">
                       <li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> กรุณามารับโต๊ะภายในเวลาที่ท่านเลือกจองไว้</li>
-                    
+                      <li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> อาทิตย์-พฤหัสบดี มารับโต๊ะก่อน 21:00 น.</li>
+                      <li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> ศุกร์-เสาร์ รับโต๊ะก่อน 20:00 น.</li>
+                      <li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> สำหรับลูกค้าที่ต้องการจองโซน VIP สามารถติดต่อแอดมินโดยตรงได้เลยนะคะ</li>
                     </ul>
                   </div>
-
                   <div className="mt-4 p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-center">
                     <p className="text-cyan-400 font-mono text-[11px] sm:text-xs animate-pulse font-semibold">กรุณาเลือกวันที่ด้านบน เพื่อเริ่มทำรายการจอง</p>
                   </div>
                 </div>
               ) : (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5 w-full">
-                  
-                  {/* เวลาเข้าโต๊ะ */}
                   <div className="space-y-2 w-full">
                     <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
                       <Clock size={15} /> 2. ระบุเวลาเข้าโต๊ะ
                     </label>
                     <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-12 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
-                      <select 
-                        value={bookingTime} 
-                        onChange={(e) => setBookingTime(e.target.value)} 
-                        className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-medium"
-                      >
+                      <select value={bookingTime} onChange={(e) => setBookingTime(e.target.value)} className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-base font-medium">
                         <option value="19:00" style={{ backgroundColor: THEME.card }}>19:00 น. </option>
                         <option value="20:00" style={{ backgroundColor: THEME.card }}>20:00 น. </option>
                         <option value="21:00" style={{ backgroundColor: THEME.card }}>21:00 น. </option>
@@ -495,7 +443,6 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  {/* แผนผังร้าน */}
                   <div className="space-y-2 w-full">
                     <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-200 leading-tight">
                       3. คลิกเลือกตำแหน่งโต๊ะอาหารบนแผนผังร้าน <span className="text-pink-400 text-xs ml-1">(เลือกได้หลายโต๊ะ)</span>
@@ -504,56 +451,32 @@ export default function BookingPage() {
                       <FloorPlan selectedTables={selectedTables} setSelectedTables={setSelectedTables} dayTables={dayTables} />
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 mt-3 text-[10px] sm:text-xs font-medium text-slate-300 w-full">
-                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 border border-purple-700"></span> VIP ว่าง</div>
                       <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500 border border-emerald-700"></span> ว่าง</div>
                       <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-sky-400 border border-white animate-pulse"></span> โต๊ะที่เลือก</div>
+                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 border border-purple-700"></span> VIP ว่าง</div>
                       <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500 border border-red-700"></span> จองแล้ว</div>
                       <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500 border border-amber-600 animate-pulse"></span> รอชำระเงิน</div>
                       <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-slate-800 border border-slate-700 opacity-60"></span> ปิดใช้งาน</div>
                     </div>
                   </div>
 
-                  {/* ข้อมูลลูกค้า */}
                   <div className="space-y-4 pt-1 w-full">
                     <div className="space-y-2 w-full">
-                      <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                        <User size={16} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง
-                      </label>
-                      <input 
-                        type="text" required 
-                        placeholder="กรอกชื่อและนามสกุลของคุณ..." 
-                        value={customerName} onChange={(e) => setCustomerName(e.target.value)} 
-                        className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" 
-                        style={{ borderColor: THEME.border }} 
-                      />
+                      <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><User size={16} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง</label>
+                      <input type="text" required placeholder="กรอกชื่อและนามสกุลของคุณ..." value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                       <div className="space-y-2 w-full">
-                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                          <Phone size={16} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ
-                        </label>
-                        <input 
-                          type="tel" required 
-                          placeholder="08X-XXX-XXXX" 
-                          value={phone} onChange={(e) => setPhone(e.target.value)} 
-                          className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" 
-                          style={{ borderColor: THEME.border }} 
-                        />
+                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Phone size={16} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ</label>
+                        <input type="tel" required placeholder="08X-XXX-XXXX" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-12 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
                       </div>
 
                       <div className="space-y-2 w-full">
-                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                          <Users size={16} style={{ color: THEME.pink }} /> จำนวนสมาชิก <span className="text-xs ml-1" style={{ color: THEME.gold }}>(ขั้นต่ำ 4 คน)</span>
-                        </label>
+                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Users size={16} style={{ color: THEME.pink }} /> จำนวนสมาชิก <span className="text-xs ml-1" style={{ color: THEME.gold }}>(ขั้นต่ำ 4 คน)</span></label>
                         <div className="relative flex items-center justify-between rounded-xl border bg-black/20 w-full h-12 px-3 transition-all duration-200" style={{ borderColor: THEME.border }}>
                           <button type="button" disabled={selectedTables.length === 0 || guestsCount <= minAllowedGuests} onClick={() => setGuestsCount(prev => Math.max(minAllowedGuests, prev - 1))} className="w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"><Minus size={14} /></button>
-                          <input 
-                            type="number" disabled={selectedTables.length === 0} placeholder="ระบุจำนวน"
-                            value={selectedTables.length === 0 || guestsCount === 0 ? '' : guestsCount} 
-                            onChange={(e) => { const val = e.target.value; setGuestsCount(val === '' ? 0 : parseInt(val, 10)); }}
-                            className="w-16 bg-transparent text-center text-white outline-none text-base font-bold text-pink-400 block h-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          />
+                          <input type="number" disabled={selectedTables.length === 0} placeholder="ระบุจำนวน" value={selectedTables.length === 0 || guestsCount === 0 ? '' : guestsCount} onChange={(e) => { const val = e.target.value; setGuestsCount(val === '' ? 0 : parseInt(val, 10)); }} className="w-16 bg-transparent text-center text-white outline-none text-base font-bold text-pink-400 block h-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                           <button type="button" disabled={selectedTables.length === 0} onClick={() => setGuestsCount(prev => prev + 1)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"><Plus size={14} /></button>
                         </div>
                       </div>
@@ -582,10 +505,66 @@ export default function BookingPage() {
         </div>
       </div>
 
+      {/* ================= 🟢 POP-UP CONFIRMATION SUMMARY (หน้าต่างตรวจสอบข้อมูลก่อนกดจ่ายเงิน) ================= */}
+      <AnimatePresence>
+        {showConfirmModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/85 backdrop-blur-md" />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-sm border shadow-2xl relative overflow-hidden rounded-2xl p-6 z-10 bg-[#16161E]"
+              style={{ borderColor: THEME.border }}
+            >
+              <div className="text-center mb-5">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                  <ClipboardCheck size={24} />
+                </div>
+                <h3 className="text-lg font-bold text-white tracking-wide">ตรวจสอบข้อมูลการจอง</h3>
+                <p className="text-xs text-gray-400 mt-1">กรุณาตรวจสอบความถูกต้องก่อนกดชำระเงิน</p>
+              </div>
+              
+              <div className="bg-black/40 rounded-xl p-4 space-y-3.5 text-sm text-gray-200 border border-white/5 mb-5 shadow-inner">
+                <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">ชื่อผู้จอง:</span> <span className="font-bold text-white text-right">{customerName}</span></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เบอร์ติดต่อ:</span> <span className="font-bold text-white text-right">{phone}</span></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">วันที่รับสิทธิ์:</span> <span className="font-bold text-white">{bookingDate}</span></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เวลาล็อกโต๊ะ:</span> <span className="font-bold text-white">{bookingTime} น.</span></div>
+                <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">จำนวนสมาชิก:</span> <span className="font-bold text-white">{guestsCount} ท่าน</span></div>
+                <div className="flex justify-between items-start border-t border-white/5 pt-3 mt-1">
+                  <span className="text-gray-400 text-xs mt-0.5">โต๊ะที่เลือก:</span> 
+                  <span className="font-bold text-emerald-400 text-right w-1/2 break-words">{selectedTables.join(', ')}</span>
+                </div>
+                
+                {eventsMap[bookingDate]?.event_type === 'concert' && (
+                  <div className="flex justify-between items-center border-t border-white/10 pt-3 mt-1 bg-amber-500/5 -mx-4 px-4 pb-1">
+                    <span className="text-amber-500/80 text-xs font-bold">ยอดชำระมัดจำล่วงหน้า:</span> 
+                    <span className="font-black text-amber-400 text-lg">{(currentEventPrice * selectedTables.length).toLocaleString()} ฿</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <button 
+                  type="button" onClick={() => setShowConfirmModal(false)}
+                  className="py-3 rounded-xl text-sm font-bold text-gray-400 hover:text-white bg-black/40 hover:bg-white/10 transition-colors border border-white/5"
+                >
+                  กลับไปแก้ไข
+                </button>
+                <button 
+                  type="button" onClick={executeBooking}
+                  className="py-3 rounded-xl text-sm font-bold text-black bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95"
+                >
+                  ยืนยันการจอง
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* ================= 🟢 POP-UP CONCERT LIST ================= */}
       <AnimatePresence>
         {showConcertListModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowConcertListModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -595,18 +574,12 @@ export default function BookingPage() {
                 <h2 className="text-lg font-bold text-white flex items-center gap-2"><Music className="text-pink-500"/> ตารางคอนเสิร์ต / ปาร์ตี้</h2>
                 <button onClick={() => setShowConcertListModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10"><X size={20}/></button>
               </div>
-
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {upcomingConcerts.length > 0 ? upcomingConcerts.map((concert) => (
                   <div key={concert.id} className="bg-black/40 border border-slate-800 rounded-2xl overflow-hidden flex flex-col group hover:border-pink-500/50 transition-colors">
-                    {concert.image_url && (
-                      <div className="w-full relative overflow-hidden border-b border-white/5 bg-black"><img src={concert.image_url} alt={concert.title} className="w-full h-auto object-cover hover:scale-105 transition-transform duration-300" /></div>
-                    )}
+                    {concert.image_url && <div className="w-full relative overflow-hidden border-b border-white/5 bg-black"><img src={concert.image_url} alt={concert.title} className="w-full h-auto object-cover hover:scale-105 transition-transform duration-300" /></div>}
                     <div className="p-4 space-y-2">
-                      <div className="flex justify-between items-start">
-                        <h3 className="font-bold text-white text-lg leading-tight">{concert.title}</h3>
-                        <span className="text-xs bg-pink-500/20 text-pink-400 px-2 py-1 rounded-md font-bold whitespace-nowrap ml-2">{concert.event_date}</span>
-                      </div>
+                      <div className="flex justify-between items-start"><h3 className="font-bold text-white text-lg leading-tight">{concert.title}</h3><span className="text-xs bg-pink-500/20 text-pink-400 px-2 py-1 rounded-md font-bold whitespace-nowrap ml-2">{concert.event_date}</span></div>
                       <p className="text-amber-400 font-bold text-sm">บัตรเหมาต่อโต๊ะ: {concert.price.toLocaleString()} THB</p>
                       {concert.perks_note && (
                         <div className="pt-2 mt-2 border-t border-white/5">
@@ -614,10 +587,7 @@ export default function BookingPage() {
                           <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{concert.perks_note}</p>
                         </div>
                       )}
-                      <button 
-                        onClick={() => { setBookingDate(concert.event_date); setShowConcertListModal(false); }}
-                        className="w-full mt-3 py-2.5 bg-white/5 hover:bg-pink-500 hover:text-white text-slate-300 rounded-xl text-sm font-bold transition-all border border-slate-700 hover:border-pink-500"
-                      >เลือกคอนเสิร์ตนี้</button>
+                      <button onClick={() => { setBookingDate(concert.event_date); setShowConcertListModal(false); }} className="w-full mt-3 py-2.5 bg-white/5 hover:bg-pink-500 hover:text-white text-slate-300 rounded-xl text-sm font-bold transition-all border border-slate-700 hover:border-pink-500">เลือกคอนเสิร์ตนี้</button>
                     </div>
                   </div>
                 )) : (
@@ -629,10 +599,10 @@ export default function BookingPage() {
         )}
       </AnimatePresence>
 
-      {/* ================= 🟢 POP-UP CONCERT (FULL IMAGE BACKGROUND) ================= */}
+      {/* ================= 🟢 POP-UP CONCERT ================= */}
       <AnimatePresence>
         {showConcertModal && concertEvent && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setShowConcertModal(false); setBookingDate(''); }} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -658,7 +628,7 @@ export default function BookingPage() {
       {/* ================= 🟢 POP-UP ERROR MODAL ================= */}
       <AnimatePresence>
         {showErrorModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowErrorModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
             <motion.div 
               initial={{ opacity: 0, scale: 0.92, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 15 }}
@@ -673,14 +643,14 @@ export default function BookingPage() {
         )}
       </AnimatePresence>
 
-      {/* ================= SUCCESS TICKET POP-UP MODAL ================= */}
+      {/* ================= 🟢 SUCCESS TICKET POP-UP MODAL ================= */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 overflow-y-auto">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={resetForm} className="fixed inset-0 bg-black/80 backdrop-blur-md" />
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="w-full max-w-md border shadow-2xl relative overflow-hidden rounded-2xl z-10" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
+              className="w-full max-w-md border shadow-2xl relative overflow-hidden rounded-2xl z-10 my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
             >
               <div className="absolute w-4 h-8 border border-l-0 rounded-r-full top-1/2 -left-0.5 -translate-y-1/2" style={{ backgroundColor: THEME.bg, borderColor: THEME.border }} />
               <div className="absolute w-4 h-8 border border-r-0 rounded-l-full top-1/2 -right-0.5 -translate-y-1/2" style={{ backgroundColor: THEME.bg, borderColor: THEME.border }} />
@@ -745,23 +715,8 @@ export default function BookingPage() {
       <style jsx global>{`
         .color-scheme-dark { color-scheme: dark; }
         .box-sizing-border { box-sizing: border-box; }
-        
-        input[type="date"]::-webkit-date-and-time-value {
-          color: #F1F1F5 !important;
-          text-align: left;
-          display: flex;
-          align-items: center;
-          min-height: 100% !important;
-          height: 100% !important;
-          padding: 0 !important;
-          margin: 0 !important;
-        }
-        input[type="date"] {
-          appearance: none !important;
-          -webkit-appearance: none !important;
-          color-scheme: dark !important;
-          color: #F1F1F5 !important;
-        }
+        input[type="date"]::-webkit-date-and-time-value { color: #F1F1F5 !important; text-align: left; display: flex; align-items: center; min-height: 100% !important; height: 100% !important; padding: 0 !important; margin: 0 !important; }
+        input[type="date"] { appearance: none !important; -webkit-appearance: none !important; color-scheme: dark !important; color: #F1F1F5 !important; }
       `}</style>
     </div>
   );
