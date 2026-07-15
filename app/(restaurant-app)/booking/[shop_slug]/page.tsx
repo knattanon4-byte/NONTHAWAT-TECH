@@ -5,7 +5,7 @@ import { useParams, notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { jsPDF as PDFInstance } from 'jspdf';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTriangle, ChevronDown, QrCode, ArrowRight, Plus, Minus, X, Music, ClipboardCheck, UploadCloud, ImageIcon, Info, Crown, Loader2 } from 'lucide-react';
+import { Calendar, Users, Phone, User, Clock, CheckCircle2, Download, AlertTriangle, ChevronDown, ArrowRight, Plus, Minus, X, Music, ClipboardCheck, UploadCloud, ImageIcon, Crown, Loader2 } from 'lucide-react';
 import FloorPlan from '@/components/booking/FloorPlan';
 
 const SHOP_PROMPTPAY_ID = '0922657200'; 
@@ -52,6 +52,9 @@ export default function BookingPage() {
   const [checkingStatus, setCheckingStatus] = useState(true); 
   const [shopExists, setShopExists] = useState(true);
 
+  // สเตทเก็บประเภทลูกค้า (ระบบจะอัปเดตให้อัตโนมัติหลังกดจอง)
+  const [customerType, setCustomerType] = useState<'normal' | 'member' | 'vip'>('normal');
+
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [bookingDate, setBookingDate] = useState('');
@@ -62,12 +65,11 @@ export default function BookingPage() {
   
   const [slipFile, setSlipFile] = useState<File | null>(null);
   
-  // 🟢 State ควบคุมราคางานอีเวนต์
   const [currentEventPrice, setCurrentEventPrice] = useState(0);
   const [currentEventExtraPrice, setCurrentEventExtraPrice] = useState(0);
-  
   const [eventsMap, setEventsMap] = useState<Record<string, any>>({});
 
+  // สเตทเก็บรหัสที่ลูกค้าพิมพ์มา
   const [memberCodeInput, setMemberCodeInput] = useState('');
   const [verifiedMember, setVerifiedMember] = useState<any>(null);
 
@@ -126,7 +128,6 @@ export default function BookingPage() {
     const fetchUpcomingConcerts = async () => {
       const { data } = await supabase.from('shop_events').select('*').eq('shop_id', shopSlug).gte('event_date', todayStr).order('event_date', { ascending: true });
       if (data) {
-        // 🟢 ดึงข้อมูลมาทั้ง concert และ party
         setUpcomingConcerts(data.filter((e: any) => e.event_type === 'concert' || e.event_type === 'party'));
         const mapped = data.reduce((acc, curr: any) => ({ ...acc, [curr.event_date]: curr }), {} as Record<string, any>);
         setEventsMap(mapped);
@@ -138,7 +139,6 @@ export default function BookingPage() {
   useEffect(() => {
     if (!bookingDate) return;
     const eventData = eventsMap[bookingDate];
-    // 🟢 เช็คว่าถ้าเป็น concert หรือ party ให้โชว์ป๊อปอัป
     if (eventData && (eventData.event_type === 'concert' || eventData.event_type === 'party')) {
       setConcertEvent(eventData);
       setShowConcertModal(true); 
@@ -218,7 +218,9 @@ export default function BookingPage() {
       return;
     }
 
+    // 🟢 ระบบตรวจสอบรหัสอัตโนมัติ 
     let vipData = null;
+    let detectedType: 'normal' | 'member' | 'vip' = 'normal';
 
     if (memberCodeInput.trim()) {
       setLoading(true);
@@ -232,7 +234,7 @@ export default function BookingPage() {
 
       if (!memberData || memberErr) {
         setLoading(false);
-        triggerError('รหัส VIP ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งครับ');
+        triggerError(`ไม่พบรหัสสมาชิก หรือรหัส VIP นี้ในระบบ กรุณาตรวจสอบอีกครั้งครับ`);
         return;
       }
 
@@ -247,14 +249,19 @@ export default function BookingPage() {
 
       if (existingUsage && existingUsage.length > 0) {
         setLoading(false);
-        triggerError('สิทธิ์ VIP นี้ถูกใช้งานสำหรับรอบวันนี้ไปแล้ว ไม่สามารถใช้ซ้ำได้ครับ');
+        triggerError('สิทธิ์รหัสนี้ถูกใช้งานสำหรับรอบวันนี้ไปแล้ว ไม่สามารถใช้ซ้ำได้ครับ');
         return;
       }
 
       vipData = memberData;
+      // TS Bypass ป้องกัน Error แดง
+      const anyMemberData = memberData as any;
+      detectedType = anyMemberData.role_type || 'member'; 
+      
       setLoading(false);
     }
 
+    setCustomerType(detectedType);
     setVerifiedMember(vipData); 
     setCurrentEventPrice(eventData?.price || 0);
     setCurrentEventExtraPrice(eventData?.extra_price_per_head || 0); 
@@ -264,8 +271,9 @@ export default function BookingPage() {
   const baseAllowedGuests = selectedTables.length * 4;
   const extraGuests = Math.max(0, guestsCount - baseAllowedGuests);
   
-  const baseCost = verifiedMember ? 0 : (currentEventPrice * (selectedTables.length || 1));
-  const extraCost = verifiedMember ? 0 : (extraGuests * currentEventExtraPrice);
+  const isVipFree = verifiedMember !== null && customerType === 'vip';
+  const baseCost = isVipFree ? 0 : (currentEventPrice * (selectedTables.length || 1));
+  const extraCost = isVipFree ? 0 : (extraGuests * currentEventExtraPrice);
   const calculatedTotalAmount = baseCost + extraCost;
 
   const executeBooking = async () => {
@@ -292,6 +300,7 @@ export default function BookingPage() {
         table_number: table,
         status: statusToSet,
         slip_url: slipUrl,
+        customer_type: customerType, 
         member_code: memberCodeInput.trim() || null 
       }));
 
@@ -306,28 +315,25 @@ export default function BookingPage() {
       }
 
       if (data && data.length > 0) {
-        
         try {
           const tablesStr = selectedTables.join(', ');
-          const isVip = memberCodeInput.trim() ? `(ใช้โค้ด VIP)` : '';
+          const typeLabel = customerType === 'vip' ? '(แขก VIP)' : customerType === 'member' ? '(Member)' : '';
+          const isVipText = memberCodeInput.trim() ? `\n🎟️ Code: ${memberCodeInput.trim()}` : '';
           
           let breakdownMsg = ``;
-          if (!verifiedMember && selectedTables.length > 0) {
+          if (!isVipFree && selectedTables.length > 0) {
             breakdownMsg += `\n💵 ค่าโต๊ะ (${selectedTables.length}): ${baseCost.toLocaleString()} บ.`;
             if (extraCost > 0) {
               breakdownMsg += `\n💵 ค่าเสริม (${extraGuests} คน): ${extraCost.toLocaleString()} บ.`;
             }
           }
 
-          const lineMessage = `📢 ลูกค้าจองโต๊ะใหม่ (ออนไลน์)\n📌 โต๊ะ: ${tablesStr}\n👤 ชื่อ: ${customerName} ${isVip}\n📞 โทร: ${phone}\n👥 จำนวน: ${guestsCount} ท่าน\n📅 วันที่: ${bookingDate}\n⏰ เวลา: ${bookingTime} น.${breakdownMsg}\n💰 ยอดโอน: ${calculatedTotalAmount.toLocaleString()} บาท`;
+          const lineMessage = `📢 ลูกค้าจองโต๊ะใหม่ (ออนไลน์)\n📌 โต๊ะ: ${tablesStr}\n👤 ชื่อ: ${customerName} ${typeLabel}${isVipText}\n📞 โทร: ${phone}\n👥 จำนวน: ${guestsCount} ท่าน\n📅 วันที่: ${bookingDate}\n⏰ เวลา: ${bookingTime} น.${breakdownMsg}\n💰 ยอดโอน: ${calculatedTotalAmount.toLocaleString()} บาท`;
           
           await fetch('/api/notify-line', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: lineMessage,
-              imageUrl: slipUrl 
-            })
+            body: JSON.stringify({ message: lineMessage, imageUrl: slipUrl })
           });
         } catch (lineErr) {
           console.error('Failed to notify LINE:', lineErr);
@@ -384,7 +390,7 @@ export default function BookingPage() {
 
   const resetForm = () => {
     setShowModal(false); setCustomerName(''); setPhone(''); setSelectedTables([]); setSlipFile(null); 
-    setMemberCodeInput(''); setVerifiedMember(null);
+    setMemberCodeInput(''); setVerifiedMember(null); setCustomerType('normal');
     if (bookingDate) fetchTodayBookings(bookingDate);
   };
 
@@ -485,45 +491,55 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-5 pt-2 w-full border-t border-slate-800/80 mt-4">
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full pt-3">
+                  {/* 🟢 4 กล่องเรียงคู่ (ชื่อ, โทร, สมาชิก, รหัส) */}
+                  <div className="space-y-4 pt-4 w-full border-t border-slate-800/80 mt-5">
+                    <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-200 leading-tight mb-2">
+                      4. ข้อมูลลูกค้าและสิทธิ์พิเศษ
+                    </label>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 w-full">
+                      
+                      {/* กล่อง 1: ชื่อ */}
                       <div className="space-y-2 w-full">
-                        <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-300"><User size={18} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง</label>
-                        <input type="text" required placeholder="กรอกชื่อและนามสกุลของคุณ..." value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-lg block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
+                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><User size={16} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง</label>
+                        <input type="text" required placeholder="กรอกชื่อและนามสกุล..." value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
                       </div>
 
+                      {/* กล่อง 2: โทร */}
                       <div className="space-y-2 w-full">
-                        <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-300">
-                          <Crown size={18} className="text-amber-400" /> รหัส VIP <span className="text-sm ml-1" style={{ color: THEME.muted }}>(ถ้าไม่มีเว้นว่างไว้)</span>
-                        </label>
-                        <input 
-                          type="text" 
-                          placeholder="รหัสจองฟรี (ถ้ามี)" 
-                          value={memberCodeInput} 
-                          onChange={(e) => setMemberCodeInput(e.target.value.toUpperCase())} 
-                          className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base sm:text-lg block min-w-0 focus:border-amber-500 font-mono uppercase" 
-                          style={{ borderColor: THEME.border }} 
-                        />
+                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Phone size={16} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ</label>
+                        <input type="tel" required placeholder="08X-XXX-XXXX" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
                       </div>
+
+                      {/* กล่อง 3: จำนวนคน */}
+                      <div className="space-y-2 w-full">
+                          <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Users size={16} style={{ color: THEME.pink }} /> จำนวนสมาชิก <span className="text-xs ml-1" style={{ color: THEME.gold }}>(ขั้นต่ำ 4 คน)</span></label>
+                          <div className="relative flex items-center justify-between rounded-xl border bg-black/20 w-full h-14 px-3 transition-all duration-200" style={{ borderColor: THEME.border }}>
+                            <button type="button" disabled={selectedTables.length === 0 || guestsCount <= minAllowedGuests} onClick={() => setGuestsCount(prev => Math.max(minAllowedGuests, prev - 1))} className="w-10 h-10 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"><Minus size={16} /></button>
+                            <input type="number" disabled={selectedTables.length === 0} placeholder="ระบุจำนวน" value={selectedTables.length === 0 || guestsCount === 0 ? '' : guestsCount} onChange={(e) => { const val = e.target.value; setGuestsCount(val === '' ? 0 : parseInt(val, 10)); }} className="w-16 bg-transparent text-center text-white outline-none text-xl font-bold text-pink-400 block h-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            <button type="button" disabled={selectedTables.length === 0} onClick={() => setGuestsCount(prev => prev + 1)} className="w-10 h-10 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"><Plus size={16} /></button>
+                          </div>
+                      </div>
+
+                      {/* กล่อง 4: รหัสสมาชิก */}
+                      <div className="space-y-2 w-full">
+                          <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
+                              <Crown size={16} className="text-amber-400" /> รหัสสมาชิก <span className="text-xs text-gray-500 font-normal ml-1">(ถ้ามี)</span>
+                          </label>
+                          <div className="relative">
+                              <Crown size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500/70" />
+                              <input 
+                                  type="text" 
+                                  placeholder="กรอกรหัสเพื่อรับสิทธิ์..." 
+                                  value={memberCodeInput} 
+                                  onChange={(e) => setMemberCodeInput(e.target.value.toUpperCase())} 
+                                  className="w-full bg-black/20 border rounded-xl pl-11 pr-4 h-14 text-white outline-none transition-all text-sm font-mono uppercase focus:border-amber-500"
+                                  style={{ borderColor: THEME.border }}
+                              />
+                          </div>
+                      </div>
+
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full">
-                      <div className="space-y-2 w-full">
-                        <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-300"><Phone size={18} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ</label>
-                        <input type="tel" required placeholder="08X-XXX-XXXX" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-lg block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
-                      </div>
-
-                      <div className="space-y-2 w-full">
-                        <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-300"><Users size={18} style={{ color: THEME.pink }} /> จำนวนสมาชิก <span className="text-sm ml-1" style={{ color: THEME.gold }}>(ขั้นต่ำ 4 คน)</span></label>
-                        <div className="relative flex items-center justify-between rounded-xl border bg-black/20 w-full h-14 px-4 transition-all duration-200" style={{ borderColor: THEME.border }}>
-                          <button type="button" disabled={selectedTables.length === 0 || guestsCount <= minAllowedGuests} onClick={() => setGuestsCount(prev => Math.max(minAllowedGuests, prev - 1))} className="w-10 h-10 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"><Minus size={16} /></button>
-                          <input type="number" disabled={selectedTables.length === 0} placeholder="ระบุจำนวน" value={selectedTables.length === 0 || guestsCount === 0 ? '' : guestsCount} onChange={(e) => { const val = e.target.value; setGuestsCount(val === '' ? 0 : parseInt(val, 10)); }} className="w-20 bg-transparent text-center text-white outline-none text-xl font-bold text-pink-400 block h-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                          <button type="button" disabled={selectedTables.length === 0} onClick={() => setGuestsCount(prev => prev + 1)} className="w-10 h-10 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"><Plus size={16} /></button>
-                        </div>
-                      </div>
-                    </div>
-
                   </div>
 
                   {selectedTables.length > 0 && (
@@ -538,7 +554,7 @@ export default function BookingPage() {
                     className="w-full mt-4 py-4 sm:py-5 text-lg font-bold tracking-wide rounded-xl transition-all active:scale-[0.98] disabled:opacity-20 disabled:scale-100 flex items-center justify-center gap-2 text-black font-sans" 
                     style={{ backgroundColor: THEME.gold, boxShadow: selectedTables.length > 0 ? `0 4px 25px rgba(229, 184, 66, 0.4)` : 'none' }} 
                   >
-                    {loading ? <Loader2 size={22} className="animate-spin" /> : 'ยืนยันรหัสจองและสรุปยอด'}
+                    {loading ? <Loader2 size={22} className="animate-spin" /> : 'ยืนยันการจองและสรุปยอด'}
                   </button>
                 </motion.div>
               )}
@@ -565,12 +581,18 @@ export default function BookingPage() {
               </div>
               
               <div className="bg-black/40 rounded-xl p-5 space-y-4 text-base text-gray-200 border border-white/5 shadow-inner">
+                {/* 🟢 แสดงผลประเภทลูกค้าที่ระบบตรวจเจอ */}
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">ประเภทลูกค้า:</span> 
+                  <span className="font-bold text-white text-right flex items-center gap-1.5">
+                    {customerType === 'vip' ? <><Crown size={14} className="text-amber-400"/>แขก VIP (ฟรี)</> : customerType === 'member' ? <><Crown size={14} className="text-purple-400"/>สมาชิก (Member)</> : 'ลูกค้าทั่วไป'}
+                  </span>
+                </div>
                 <div className="flex justify-between items-center"><span className="text-gray-400 text-sm">ชื่อผู้จอง:</span> <span className="font-bold text-white text-right">{customerName}</span></div>
                 <div className="flex justify-between items-center"><span className="text-gray-400 text-sm">เบอร์ติดต่อ:</span> <span className="font-mono text-white text-right">{phone}</span></div>
                 <div className="flex justify-between items-center"><span className="text-gray-400 text-sm">วันที่รับสิทธิ์:</span> <span className="font-mono text-white">{bookingDate}</span></div>
                 <div className="flex justify-between items-center"><span className="text-gray-400 text-sm">เวลาล็อกโต๊ะ:</span> <span className="font-mono text-white">{bookingTime} น.</span></div>
                 
-                {/* 🟢 แสดงสรุปจำนวนคน และคนที่เสริมมา */}
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-sm">จำนวนสมาชิก:</span> 
                   <span className="font-bold text-white">
@@ -581,15 +603,16 @@ export default function BookingPage() {
                 
                 <div className="flex justify-between items-start border-t border-white/5 pt-4 mt-2"><span className="text-gray-400 text-sm mt-0.5">โต๊ะที่เลือก:</span> <span className="font-bold text-emerald-400 text-right w-1/2 break-words">{selectedTables.join(', ')}</span></div>
                 
-                {verifiedMember && (
+                {/* 🟢 โชว์สิทธิ์ฟรีเฉพาะ VIP */}
+                {verifiedMember && customerType === 'vip' && (
                   <div className="flex justify-between items-center border-t border-white/5 pt-4 mt-2">
-                    <span className="text-emerald-400 text-sm flex items-center gap-1.5"><Crown size={16}/> สิทธิ์สมาชิก:</span> 
-                    <span className="font-bold text-emerald-400 text-right text-sm bg-emerald-500/20 px-2.5 py-1 rounded">VIP PASS</span>
+                    <span className="text-emerald-400 text-sm flex items-center gap-1.5"><Crown size={16}/> สิทธิ์ VIP:</span> 
+                    <span className="font-bold text-emerald-400 text-right text-sm bg-emerald-500/20 px-2.5 py-1 rounded">ฟรีค่าโต๊ะ</span>
                   </div>
                 )}
 
-                {/* 🟢 แสดงบิลแจกแจงค่าโต๊ะและค่าบัตรเสริม */}
-                {!verifiedMember && (
+                {/* 🟢 โชว์บิลสำหรับลูกค้าปกติและ Member */}
+                {(!verifiedMember || customerType === 'member') && (
                   <>
                     <div className="flex justify-between items-center border-t border-white/5 pt-4 mt-2">
                       <span className="text-gray-400 text-sm">ค่าบัตรเหมา ({selectedTables.length} โต๊ะ):</span> 
@@ -652,7 +675,6 @@ export default function BookingPage() {
                     <div className="p-5 space-y-2.5">
                       <div className="flex justify-between items-start"><h3 className="font-bold text-white text-xl leading-tight">{concert.title}</h3><span className="text-sm bg-pink-500/20 text-pink-400 px-2.5 py-1 rounded-md font-bold whitespace-nowrap ml-2">{concert.event_date}</span></div>
                       
-                      {/* 🟢 อัปเดต UI แยกคอนเสิร์ตกับปาร์ตี้ */}
                       {concert.event_type === 'concert' ? (
                         <>
                           <p className="text-amber-400 font-bold text-base">บัตรเหมาต่อโต๊ะ: {concert.price?.toLocaleString()} THB</p>
@@ -691,7 +713,6 @@ export default function BookingPage() {
                 <h2 className="text-base font-black text-white bg-black/40 backdrop-blur-md border border-white/10 px-5 py-2 rounded-full mb-3">{concertEvent.event_date}</h2>
                 <h3 className="text-3xl sm:text-4xl font-black text-white mb-5 drop-shadow-lg">{concertEvent.title || 'Special Event'}</h3>
                 
-                {/* 🟢 อัปเดต UI อธิบายราคา (แสดงเฉพาะคอนเสิร์ต ถ้าปาร์ตี้แสดงแค่คำบรรยาย) */}
                 <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-3xl p-6 w-full text-base font-bold shadow-xl whitespace-pre-line leading-relaxed">
                   {concertEvent.perks_note || (concertEvent.event_type === 'concert' ? `โปรโมชั่นสำหรับวันนี้\nเตรียมพร้อมมาสนุกสุดเหวี่ยง\nไปพร้อมกับศิลปินได้เลย!` : `เตรียมพบกับกิจกรรมปาร์ตี้สุดพิเศษของเรา!`)}
                   
@@ -762,8 +783,8 @@ export default function BookingPage() {
                   </div>
                 ) : verifiedMember ? (
                   <div className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-xs text-slate-300 space-y-1.5 font-sans leading-relaxed text-center">
-                    <p className="text-emerald-400 font-bold mb-1.5 text-sm flex items-center justify-center gap-1.5"><Crown size={16}/> ใช้สิทธิ์สมาชิก VIP เรียบร้อย</p>
-                    <p>ยอดชำระ 0 บาท ดาวน์โหลดตั๋วเข้างานได้เลยครับ</p>
+                    <p className="text-emerald-400 font-bold mb-1.5 text-sm flex items-center justify-center gap-1.5"><Crown size={16}/> ใช้สิทธิ์ {customerType === 'vip' ? 'VIP' : 'Member'} เรียบร้อย</p>
+                    <p>ยอดชำระ 0 บาท ดาวน์โหลดตั๋วคิวได้เลยครับ</p>
                   </div>
                 ) : null}
 

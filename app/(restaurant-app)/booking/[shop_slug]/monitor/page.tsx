@@ -26,8 +26,6 @@ import {
 } from 'lucide-react';
 import FloorPlan from '@/components/booking/FloorPlan'; 
 
-// 🟢 บอสเอาเลขพร้อมเพย์จริงๆ มาใส่ในเครื่องหมายคำพูดนี้ได้เลยครับ (พิมพ์เฉพาะตัวเลขติดกัน)
-// ⚠️ ถ้ายังไม่ใส่ QR Code จะสแกนไม่ได้ ป้องกันการโอนผิดครับ
 const PROMPTPAY_NUMBER = "0922657200"; 
 
 const THEME = {
@@ -112,6 +110,7 @@ export default function MonitorPage() {
   
   const [adminSelectedTables, setAdminSelectedTables] = useState<string[]>([]);
   
+  const [adminCustomerType, setAdminCustomerType] = useState<'normal' | 'member' | 'vip'>('normal');
   const [adminForm, setAdminForm] = useState({ name: '', phone: '', time: '19:00', guests: 4, saleName: '', memberCode: '' });
   const [adminSlipFile, setAdminSlipFile] = useState<File | null>(null);
   const [adminSlipPreview, setAdminSlipPreview] = useState<string | null>(null);
@@ -153,14 +152,15 @@ export default function MonitorPage() {
   const [membersList, setMembersList] = useState<any[]>([]);
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberCode, setNewMemberCode] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState<'member' | 'vip'>('member');
   const [isMemberLoading, setIsMemberLoading] = useState(false);
+  // 🟢 สเตทสำหรับค้นหาสมาชิก
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
   const [isSalesModalOpen, setIsSalesModalOpen] = useState(false);
   const [salesList, setSalesList] = useState<any[]>([]);
   const [newSaleName, setNewSaleName] = useState('');
   const [isSalesLoading, setIsSalesLoading] = useState(false);
-  
-  // 🟢 เพิ่ม State สำหรับการค้นหาเซลล์
   const [salesSearchQuery, setSalesSearchQuery] = useState('');
 
   const [viewYear, setViewYear] = useState<number>(new Date().getFullYear());
@@ -223,24 +223,39 @@ export default function MonitorPage() {
     if (!newMemberName || !newMemberCode) return;
     setIsMemberLoading(true);
     try {
-      const { error } = await supabase.from('shop_members').insert([{ shop_id: shopSlug, member_code: newMemberCode, member_name: newMemberName }]);
+      const { error } = await supabase.from('shop_members').insert([{ 
+        shop_id: shopSlug, 
+        member_code: newMemberCode, 
+        member_name: newMemberName,
+        role_type: newMemberRole
+      }]);
       if (error) throw error;
-      setNewMemberName(''); setNewMemberCode('');
+      setNewMemberName(''); setNewMemberCode(''); setNewMemberRole('member');
       await loadMembers();
-      triggerNotice('success', 'เพิ่มสมาชิกสำเร็จ', 'ลูกค้าสามารถนำรหัสนี้ไปใช้จองโต๊ะได้ทันที');
+      triggerNotice('success', 'เพิ่มรหัสสำเร็จ', 'บันทึกรหัสลงในระบบเรียบร้อยแล้ว');
     } catch (err: any) {
-      triggerNotice('error', 'เพิ่มสมาชิกไม่สำเร็จ', 'อาจมีรหัสนี้ในระบบแล้ว กรุณาตั้งรหัสใหม่');
+      triggerNotice('error', 'เพิ่มรหัสไม่สำเร็จ', 'อาจมีรหัสนี้ในระบบแล้ว กรุณาตั้งรหัสใหม่');
     } finally { setIsMemberLoading(false); }
   };
 
   const handleDeleteMember = async (id: string) => {
-    if (!window.confirm('ยืนยันการลบสมาชิก VIP นี้ใช่หรือไม่?')) return;
+    if (!window.confirm('ยืนยันการลบรหัสนี้ใช่หรือไม่?')) return;
     try {
       await supabase.from('shop_members').delete().eq('id', id);
       await loadMembers();
-      triggerNotice('success', 'ลบสมาชิกสำเร็จ', 'รหัสนี้จะไม่สามารถใช้เข้าระบบได้อีกต่อไป');
+      triggerNotice('success', 'ลบรหัสสำเร็จ', 'รหัสนี้จะไม่สามารถใช้เข้าระบบได้อีกต่อไป');
     } catch (err) { triggerNotice('error', 'ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
   };
+
+  // 🟢 กรองรายชื่อสมาชิก
+  const filteredMembersList = useMemo(() => {
+    const q = memberSearchQuery.trim().toLowerCase();
+    if (!q) return membersList;
+    return membersList.filter(m => 
+      m.member_name?.toLowerCase().includes(q) || 
+      m.member_code?.toLowerCase().includes(q)
+    );
+  }, [membersList, memberSearchQuery]);
 
   const handleAddSale = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -266,7 +281,6 @@ export default function MonitorPage() {
     } catch (err) { triggerNotice('error', 'ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
   };
 
-  // 🟢 คำนวณรายชื่อเซลล์ที่ถูกค้นหา (ฟิลเตอร์แบบเรียลไทม์)
   const filteredSalesList = useMemo(() => {
     const q = salesSearchQuery.trim().toLowerCase();
     if (!q) return salesList;
@@ -398,6 +412,7 @@ export default function MonitorPage() {
     setTablePendingLock(null);
     setAdminBookingStep('form');
     setAdminForm({ name: '', phone: '', time: '19:00', guests: 4, saleName: '', memberCode: '' });
+    setAdminCustomerType('normal');
     setAdminSlipFile(null);
     setAdminSlipPreview(null);
     setPendingBookingsData([]);
@@ -427,22 +442,20 @@ export default function MonitorPage() {
     const ev = eventsMap[adminSelectedDate];
     if (!ev || ev.event_type !== 'concert') return 0;
 
-    let isMemberValid = false;
-    if (adminForm.memberCode) {
-      isMemberValid = membersList.some(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
+    let validRole = null;
+    if (adminCustomerType !== 'normal' && adminForm.memberCode) {
+      const found = membersList.find(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
+      if(found && found.role_type === adminCustomerType) validRole = found.role_type;
     }
+
+    if (validRole === 'vip') return 0; // VIP ฟรี
 
     const ticketPrice = ev.extra_price_per_head || 0;
-
-    if (isMemberValid) {
-       return adminForm.guests * ticketPrice;
-    } else {
-       const basePrice = ev.price * adminSelectedTables.length;
-       const extraGuests = Math.max(0, adminForm.guests - (4 * adminSelectedTables.length));
-       const extraPrice = extraGuests * ticketPrice;
-       return basePrice + extraPrice;
-    }
-  }, [adminSelectedDate, eventsMap, adminSelectedTables.length, adminForm.guests, adminForm.memberCode, membersList]);
+    const basePrice = ev.price * adminSelectedTables.length;
+    const extraGuests = Math.max(0, adminForm.guests - (4 * adminSelectedTables.length));
+    const extraPrice = extraGuests * ticketPrice;
+    return basePrice + extraPrice;
+  }, [adminSelectedDate, eventsMap, adminSelectedTables.length, adminForm.guests, adminForm.memberCode, membersList, adminCustomerType]);
 
   const isAdminSlipRequired = useMemo(() => {
      const isConcert = eventsMap[adminSelectedDate]?.event_type === 'concert';
@@ -452,7 +465,13 @@ export default function MonitorPage() {
   const generateLineMessage = useCallback(() => {
     const ev = eventsMap[adminSelectedDate];
     const isConcert = ev?.event_type === 'concert';
-    const isMemberValid = adminForm.memberCode && membersList.some(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
+    
+    let validRole = null;
+    if (adminCustomerType !== 'normal' && adminForm.memberCode) {
+      const found = membersList.find(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
+      if(found && found.role_type === adminCustomerType) validRole = found.role_type;
+    }
+
     const ticketPrice = ev?.extra_price_per_head || 0;
     const basePrice = (ev?.price || 0) * adminSelectedTables.length;
     const extraGuests = Math.max(0, adminForm.guests - (4 * adminSelectedTables.length));
@@ -460,8 +479,8 @@ export default function MonitorPage() {
 
     let priceDetails = '';
     if (isConcert) {
-      if (isMemberValid) {
-        priceDetails = `\n💵 ค่าตั๋ว VIP (${adminForm.guests} ท่าน): ${adminTotalPrice.toLocaleString()} บ.\n💰 ยอดโอน: ${adminTotalPrice.toLocaleString()} บาท`;
+      if (validRole === 'vip') {
+        priceDetails = `\n💰 ยอดโอน: 0 บาท (ใช้สิทธิ์ VIP)`;
       } else {
         priceDetails = `\n💵 ค่าโต๊ะ (${adminSelectedTables.length}): ${basePrice.toLocaleString()} บ.`;
         if (extraGuests > 0) {
@@ -473,23 +492,30 @@ export default function MonitorPage() {
       priceDetails = `\n💰 ยอดโอน: 0 บาท (วันปกติ)`;
     }
 
-    const vipText = adminForm.memberCode ? `\n🎟️ VIP Code: ${adminForm.memberCode}` : '';
+    const typeLabel = adminCustomerType === 'vip' ? '(แขก VIP)' : adminCustomerType === 'member' ? '(Member)' : '';
+    const vipText = adminForm.memberCode ? `\n🎟️ Code: ${adminForm.memberCode}` : '';
 
-    return `📣 ลูกค้าจองโต๊ะใหม่ (Walk-in / เซลล์)\n📌 โต๊ะ: ${adminSelectedTables.join(', ')}\n👤 ชื่อ: ${adminForm.name}\n📞 โทร: ${adminForm.phone || '-'}\n👥 จำนวน: ${adminForm.guests} ท่าน\n📅 วันที่: ${adminSelectedDate}\n⏰ เวลา: ${adminForm.time} น.\n🧑‍💼 เซลล์: ${adminForm.saleName || '-'}${vipText}${priceDetails}`;
-  }, [adminSelectedDate, eventsMap, adminSelectedTables, adminForm, adminTotalPrice, membersList]);
+    return `📣 ลูกค้าจองโต๊ะใหม่ (Walk-in / เซลล์)\n📌 โต๊ะ: ${adminSelectedTables.join(', ')}\n👤 ชื่อ: ${adminForm.name} ${typeLabel}\n📞 โทร: ${adminForm.phone || '-'}\n👥 จำนวน: ${adminForm.guests} ท่าน\n📅 วันที่: ${adminSelectedDate}\n⏰ เวลา: ${adminForm.time} น.\n🧑‍💼 เซลล์: ${adminForm.saleName || '-'}${vipText}${priceDetails}`;
+  }, [adminSelectedDate, eventsMap, adminSelectedTables, adminForm, adminTotalPrice, membersList, adminCustomerType]);
 
   const handleAdminFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (adminSelectedTables.length === 0) return;
     if (!adminForm.name) { triggerNotice('error', 'ข้อมูลไม่ครบ', 'กรุณาระบุชื่อลูกค้าครับ'); return; }
 
-    let isMemberValid = false;
-    if (adminForm.memberCode) {
-      isMemberValid = membersList.some(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
-      if (!isMemberValid) {
-        triggerNotice('error', 'รหัส VIP ไม่ถูกต้อง', 'ไม่พบรหัส VIP นี้ในระบบ กรุณาตรวจสอบอีกครั้ง');
+    if (adminCustomerType !== 'normal' && adminForm.memberCode) {
+      const found = membersList.find(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
+      if (!found) {
+        triggerNotice('error', 'รหัสไม่ถูกต้อง', 'ไม่พบรหัสนี้ในระบบ กรุณาตรวจสอบอีกครั้ง');
         return;
       }
+      if (found.role_type && found.role_type !== adminCustomerType) {
+        triggerNotice('error', 'รหัสไม่ตรงประเภท', `รหัสนี้เป็นสิทธิ์ของ ${found.role_type.toUpperCase()} ไม่ใช่ ${adminCustomerType.toUpperCase()} ครับ`);
+        return;
+      }
+    } else if (adminCustomerType !== 'normal' && !adminForm.memberCode) {
+        triggerNotice('error', 'ข้อมูลไม่ครบ', 'กรุณากรอกรหัสด้วยครับ');
+        return;
     }
 
     if (isAdminSlipRequired) {
@@ -510,7 +536,8 @@ export default function MonitorPage() {
           status: 'confirmed',
           slip_url: null,
           sales_name: adminForm.saleName || null,
-          member_code: adminForm.memberCode || null,
+          customer_type: adminCustomerType,
+          member_code: adminCustomerType !== 'normal' ? adminForm.memberCode : null,
         }));
 
         const { error } = await supabase.from('restaurant_bookings').insert(newBookings);
@@ -557,7 +584,8 @@ export default function MonitorPage() {
         status: 'pending',
         slip_url: uploadedSlipUrl,
         sales_name: adminForm.saleName || null,
-        member_code: adminForm.memberCode || null,
+        customer_type: adminCustomerType,
+        member_code: adminCustomerType !== 'normal' ? adminForm.memberCode : null,
       }));
 
       const { error: insertError } = await supabase.from('restaurant_bookings').insert(newBookings);
@@ -676,14 +704,14 @@ export default function MonitorPage() {
 
   const handleExportCSV = () => {
     if (filtered.length === 0) { triggerNotice('error', 'ไม่สามารถดาวน์โหลดได้', 'ไม่มีข้อมูลในหน้าฟีดให้ดาวน์โหลดในขณะนี้ครับ'); return; }
-    const headers = ['วันที่จอง', 'เวลานัดหมาย', 'รหัสใบจอง', 'ชื่อลูกค้า', 'เบอร์โทรศัพท์', 'เซลล์', 'รหัสโต๊ะ', 'จำนวนแขก', 'สถานะคิว', 'ค่าบัตรแพ็กเกจรวม'];
+    const headers = ['วันที่จอง', 'เวลานัดหมาย', 'รหัสใบจอง', 'ประเภทลูกค้า', 'ชื่อลูกค้า', 'เบอร์โทรศัพท์', 'เซลล์', 'รหัสโต๊ะ', 'จำนวนแขก', 'สถานะคิว', 'ค่าบัตรแพ็กเกจรวม'];
     const rows = filtered.map((b) => {
       let statusText = 'รอเช็คอิน';
       if (b.status === 'pending') statusText = 'รอชำระเงิน';
       else if (b.status === 'checked_in') statusText = 'มาแล้ว';
       else if (b.status === 'no_show') statusText = 'ไม่มา (No Show)';
       const tablePrice = eventsMap[b.booking_date]?.price || 0;
-      return [ b.booking_date, (b.booking_time || '').slice(0, 5), b.booking_code, `"${b.customer_name?.replace(/"/g, '""')}"`, `="${b.phone}"`, `"${b.sales_name || '-'}"`, b.table_number, b.guests_count, statusText, `${tablePrice} บาท` ];
+      return [ b.booking_date, (b.booking_time || '').slice(0, 5), b.booking_code, b.customer_type || 'normal', `"${b.customer_name?.replace(/"/g, '""')}"`, `="${b.phone}"`, `"${b.sales_name || '-'}"`, b.table_number, b.guests_count, statusText, `${tablePrice} บาท` ];
     });
     const csvContent = ['\uFEFF' + headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -765,7 +793,7 @@ export default function MonitorPage() {
             {role === 'owner' && (
               <>
                 <button type="button" onClick={() => { setIsSalesModalOpen(true); loadSales(); setSalesSearchQuery(''); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-[#00F5D4] bg-[#00F5D4]/10 border-[#00F5D4]/20 hover:bg-[#00F5D4]/20"><Briefcase size={14} className="hidden sm:block" />จัดการเซลล์</button>
-                <button type="button" onClick={() => { setIsMemberModalOpen(true); loadMembers(); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20"><Crown size={14} className="hidden sm:block" />จัดการ VIP</button>
+                <button type="button" onClick={() => { setIsMemberModalOpen(true); loadMembers(); setMemberSearchQuery(''); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20"><Crown size={14} className="hidden sm:block" />ระบบสมาชิก / VIP</button>
                 <button type="button" onClick={() => { setIsEventModalOpen(true); setEventStatusMsg(null); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-pink-400 bg-pink-500/10 border-pink-500/20 hover:bg-pink-500/20"><Music size={14} className="hidden sm:block" />ปฏิทินร้าน</button>
                 <div className="relative">
                   <button type="button" onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-extrabold border transition-all active:scale-95 ${isBookingOpen ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
@@ -983,6 +1011,14 @@ export default function MonitorPage() {
                       {STATUS_META[selectedBookingForSlip.status]?.label || selectedBookingForSlip.status}
                     </span>
                   </div>
+                  
+                  <div className="flex justify-between items-center bg-white/5 p-1.5 -mx-1.5 rounded">
+                    <span className="text-gray-400 text-xs">ประเภทลูกค้า:</span> 
+                    <span className="font-bold text-white text-right">
+                        {selectedBookingForSlip.customer_type === 'vip' ? 'แขก VIP' : selectedBookingForSlip.customer_type === 'member' ? 'สมาชิก (Member)' : 'ลูกค้าทั่วไป'}
+                    </span>
+                  </div>
+
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">ชื่อลูกค้า:</span> <span className="font-bold text-white text-right">{selectedBookingForSlip.customer_name}</span></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เบอร์ติดต่อ:</span> <span className="font-mono text-white text-right">{selectedBookingForSlip.phone}</span></div>
                   
@@ -993,7 +1029,7 @@ export default function MonitorPage() {
                   )}
                   {selectedBookingForSlip.member_code && (
                     <div className="flex justify-between items-center bg-amber-500/10 p-1.5 -mx-1.5 rounded text-amber-400">
-                      <span className="text-xs font-bold flex items-center gap-1"><Ticket size={14}/> รหัส VIP ที่ใช้:</span> <span className="font-mono">{selectedBookingForSlip.member_code}</span>
+                      <span className="text-xs font-bold flex items-center gap-1"><Ticket size={14}/> รหัส {selectedBookingForSlip.customer_type === 'member' ? 'Member' : 'VIP'} ที่ใช้:</span> <span className="font-mono">{selectedBookingForSlip.member_code}</span>
                     </div>
                   )}
 
@@ -1076,7 +1112,6 @@ export default function MonitorPage() {
             >
               {lockModalMode === 'lock' ? (
                 <>
-                  {/* 🟢 STEP 1: หน้าฟอร์มกรอกข้อมูล */}
                   {adminBookingStep === 'form' ? (
                     <form onSubmit={handleAdminFormSubmit} className="space-y-4 animate-fade-in">
                       <div className="flex items-center gap-3 mb-2">
@@ -1131,15 +1166,26 @@ export default function MonitorPage() {
                             </datalist>
                           </div>
                           
-                          <div>
-                            <label className="block text-xs font-semibold mb-1 text-amber-400 flex items-center gap-1"><Ticket size={13} /> รหัสสมาชิก VIP (ถ้ามี)</label>
-                            <input 
-                              type="text" 
-                              placeholder="กรอกโค้ดเพื่อรับสิทธิ์จองฟรี/ส่วนลด" 
-                              value={adminForm.memberCode} 
-                              onChange={(e) => setAdminForm({...adminForm, memberCode: e.target.value})}
-                              className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-amber-400 outline-none focus:border-amber-500 font-mono text-sm uppercase placeholder:text-slate-600"
-                            />
+                          <div className="pt-2">
+                             <label className="block text-xs font-semibold mb-1.5 text-amber-400 flex items-center gap-1"><Crown size={13} /> ประเภทสิทธิ์พิเศษ</label>
+                             <div className="grid grid-cols-3 gap-2">
+                                <button type="button" onClick={() => { setAdminCustomerType('normal'); setAdminForm({...adminForm, memberCode: ''}); }} className={`py-2 rounded-lg text-[11px] font-bold border transition-all ${adminCustomerType === 'normal' ? 'bg-slate-700 text-white border-slate-500' : 'bg-black/40 text-slate-500 border-slate-800'}`}>ไม่มีสิทธิ์</button>
+                                <button type="button" onClick={() => { setAdminCustomerType('member'); setAdminForm({...adminForm, memberCode: ''}); }} className={`py-2 rounded-lg text-[11px] font-bold border transition-all ${adminCustomerType === 'member' ? 'bg-purple-500/20 text-purple-400 border-purple-500' : 'bg-black/40 text-slate-500 border-slate-800'}`}>Member</button>
+                                <button type="button" onClick={() => { setAdminCustomerType('vip'); setAdminForm({...adminForm, memberCode: ''}); }} className={`py-2 rounded-lg text-[11px] font-bold border transition-all ${adminCustomerType === 'vip' ? 'bg-amber-500/20 text-amber-400 border-amber-500' : 'bg-black/40 text-slate-500 border-slate-800'}`}>VIP (ฟรี)</button>
+                             </div>
+                             <AnimatePresence>
+                                {adminCustomerType !== 'normal' && (
+                                    <motion.div initial={{opacity: 0, height: 0}} animate={{opacity: 1, height: 'auto'}} exit={{opacity: 0, height: 0}} className="pt-2">
+                                        <input 
+                                          type="text" 
+                                          placeholder={`กรอกรหัส ${adminCustomerType === 'vip' ? 'VIP' : 'Member'}...`}
+                                          value={adminForm.memberCode} 
+                                          onChange={(e) => setAdminForm({...adminForm, memberCode: e.target.value.toUpperCase()})}
+                                          className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-amber-400 outline-none focus:border-amber-500 font-mono text-sm uppercase placeholder:text-slate-600"
+                                        />
+                                    </motion.div>
+                                )}
+                             </AnimatePresence>
                           </div>
                         </div>
                       </div>
@@ -1158,7 +1204,6 @@ export default function MonitorPage() {
                       </div>
                     </form>
                   ) : (
-                    /* 🟢 STEP 2: หน้าชำระเงินและแนบสลิป */
                     <form onSubmit={handleAdminPaymentSubmit} className="space-y-4 animate-fade-in">
                       <div className="flex items-center gap-3 mb-2">
                         <button type="button" onClick={() => setAdminBookingStep('form')} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors border border-slate-800">
@@ -1175,9 +1220,11 @@ export default function MonitorPage() {
                          <div className="flex justify-between text-gray-300 text-xs"><span>ชื่อลูกค้า:</span><span className="font-bold text-white">{adminForm.name}</span></div>
                          <div className="flex justify-between text-gray-300 text-xs"><span>จำนวนคน:</span><span className="font-bold text-white">{adminForm.guests} ท่าน</span></div>
                          
-                         {/* 🟢 แจ้งเตือนสิทธิ์เมมเบอร์ในสรุปยอด */}
-                         {membersList.some(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase()) && (
-                           <div className="flex justify-between text-amber-400 text-xs"><span>ใช้สิทธิ์เมมเบอร์:</span><span className="font-bold">ชำระเฉพาะค่าตั๋ว {adminForm.guests} ท่าน</span></div>
+                         {adminCustomerType !== 'normal' && (
+                           <div className="flex justify-between text-amber-400 text-xs">
+                             <span>ประเภทลูกค้า:</span>
+                             <span className="font-bold">{adminCustomerType === 'vip' ? 'VIP (ฟรี)' : 'Member'}</span>
+                           </div>
                          )}
 
                          <div className="flex justify-between items-center text-pink-400 font-bold border-t border-slate-800 pt-3 mt-1">
@@ -1186,7 +1233,6 @@ export default function MonitorPage() {
                          </div>
                       </div>
 
-                      {/* 🟢 ส่วนแสดง Dynamic PromptPay QR Code */}
                       <div className="bg-[#003D6A] p-4 rounded-xl flex flex-col items-center justify-center text-white border border-[#002D4E] shadow-inner">
                         <div className="bg-white p-2.5 rounded-xl mb-3 shadow-lg h-36 w-36 flex items-center justify-center overflow-hidden">
                           <img 
@@ -1218,7 +1264,6 @@ export default function MonitorPage() {
                       </div>
 
                       <div className="flex gap-3 pt-2">
-                        {/* 🟢 ปุ่มนี้ใช้ยกเลิกการทำรายการทั้งหมด เพราะเราข้ามการล็อกโต๊ะใน Step 1 มาแล้ว */}
                         <button type="button" onClick={closeAdminLockModal} className="w-1/3 h-11 rounded-xl border border-slate-700 hover:bg-white/5 text-white text-xs font-bold transition-colors">ยกเลิก</button>
                         <button type="submit" disabled={isLockProcessing || !adminSlipFile} className="flex-1 h-11 rounded-xl bg-emerald-500 text-black font-extrabold text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-400 transition-colors disabled:opacity-50 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
                           {isLockProcessing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} className="stroke-[3]" />} ส่งสลิปเพื่อรอตรวจสอบ
@@ -1257,43 +1302,68 @@ export default function MonitorPage() {
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[80] transition-all overflow-y-auto">
             <div className="w-full max-w-2xl rounded-2xl p-6 border my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
               <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: THEME.border }}>
-                <div className="flex items-center gap-2"><Crown size={20} style={{ color: THEME.gold }} /><h2 className="text-xl font-bold tracking-tight text-white">จัดการระบบสมาชิก VIP</h2></div>
+                <div className="flex items-center gap-2"><Crown size={20} style={{ color: THEME.gold }} /><h2 className="text-xl font-bold tracking-tight text-white">ระบบจัดการสมาชิก / VIP</h2></div>
                 <button onClick={() => setIsMemberModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                 <form onSubmit={handleAddMember} className="space-y-4 p-4 bg-black/30 rounded-2xl border" style={{ borderColor: THEME.border }}>
-                  <h3 className="text-sm font-bold text-white mb-2">เพิ่มรหัส VIP ใหม่</h3>
+                  <h3 className="text-sm font-bold text-white mb-2">เพิ่มรหัสใหม่</h3>
                   <div>
-                    <label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อสมาชิก / กลุ่ม VIP</label>
+                    <label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อผู้ถือสิทธิ์ / ชื่อกลุ่ม</label>
                     <input type="text" required placeholder="เช่น กลุ่มคุณแพทตี้" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-10 text-white outline-none focus:border-amber-500 text-sm" style={{ borderColor: THEME.border }} />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold mb-1 text-gray-300">รหัสผ่านสำหรับจองฟรี (Code)</label>
-                    <input type="text" required placeholder="เช่น PATTYVIP99" value={newMemberCode} onChange={(e) => setNewMemberCode(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-10 text-white outline-none focus:border-amber-500 text-sm font-mono" style={{ borderColor: THEME.border }} />
+                    <label className="block text-xs font-semibold mb-1 text-gray-300">รหัสผ่านสำหรับรับสิทธิ์ (Code)</label>
+                    <input type="text" required placeholder="เช่น PATTYVIP99" value={newMemberCode} onChange={(e) => setNewMemberCode(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-10 text-white outline-none focus:border-amber-500 text-sm font-mono uppercase" style={{ borderColor: THEME.border }} />
                   </div>
+                  
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5 text-gray-300">ประเภทสิทธิ์</label>
+                    <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setNewMemberRole('member')} className={`py-2 rounded-lg text-xs font-bold border transition-all ${newMemberRole === 'member' ? 'bg-purple-500/20 text-purple-400 border-purple-500' : 'bg-black/40 text-slate-500 border-slate-700'}`}>สมาชิก (Member)</button>
+                        <button type="button" onClick={() => setNewMemberRole('vip')} className={`py-2 rounded-lg text-xs font-bold border transition-all ${newMemberRole === 'vip' ? 'bg-amber-500/20 text-amber-400 border-amber-500' : 'bg-black/40 text-slate-500 border-slate-700'}`}>แขก VIP (ฟรี)</button>
+                    </div>
+                  </div>
+
                   <button type="submit" disabled={isMemberLoading || !newMemberName || !newMemberCode} className="w-full h-10 rounded-xl font-bold text-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2 text-sm" style={{ backgroundColor: THEME.gold }}>
-                    {isMemberLoading ? <Loader2 size={16} className="animate-spin" /> : <><Plus size={16} /> บันทึกรหัส VIP</>}
+                    {isMemberLoading ? <Loader2 size={16} className="animate-spin" /> : <><Plus size={16} /> บันทึกรหัส</>}
                   </button>
                 </form>
 
                 <div className="space-y-3 flex flex-col h-full">
-                  <h3 className="text-sm font-bold text-white px-1">รายชื่อ VIP ในระบบ ({membersList.length})</h3>
+                  <h3 className="text-sm font-bold text-white px-1">รายชื่อทั้งหมดในระบบ ({membersList.length})</h3>
+
+                  {/* 🟢 ช่องค้นหาสมาชิก (Auto Complete Filter) */}
+                  <div className="relative px-1">
+                    <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input 
+                      type="text" 
+                      placeholder="ค้นหาชื่อ หรือ รหัสโค้ด..." 
+                      value={memberSearchQuery}
+                      onChange={(e) => setMemberSearchQuery(e.target.value)}
+                      className="w-full bg-black/40 border border-slate-700 rounded-xl pl-9 pr-3 h-9 text-white outline-none focus:border-amber-500 text-xs transition-colors"
+                    />
+                  </div>
+
                   <div className="h-[200px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                    {membersList.length > 0 ? membersList.map((m) => (
+                    {filteredMembersList.length > 0 ? filteredMembersList.map((m) => (
                       <div key={m.id} className="p-3 bg-black/40 border rounded-xl flex items-center justify-between group" style={{ borderColor: THEME.border }}>
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-white truncate">{m.member_name}</p>
-                          <p className="text-xs font-mono text-amber-400 truncate">Code: {m.member_code}</p>
+                          <div className="flex items-center gap-2 mb-1">
+                              {m.role_type === 'vip' ? <span className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0.5 rounded font-bold">VIP</span> : <span className="bg-purple-500/20 text-purple-400 text-[10px] px-1.5 py-0.5 rounded font-bold">MEMBER</span>}
+                              <p className="text-sm font-bold text-white truncate">{m.member_name}</p>
+                          </div>
+                          <p className="text-xs font-mono text-gray-400 truncate">Code: <span className="text-amber-400">{m.member_code}</span></p>
                         </div>
                         <button onClick={() => handleDeleteMember(m.id)} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="ลบรหัสนี้">
                           <Trash2 size={16} />
                         </button>
                       </div>
                     )) : (
-                      <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
+                      <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2 pt-4">
                         <Crown size={24} className="opacity-20" />
-                        <p className="text-xs">ยังไม่มีรหัส VIP ในระบบ</p>
+                        <p className="text-xs">{memberSearchQuery ? 'ไม่พบข้อมูลที่ค้นหา' : 'ยังไม่มีรหัสในระบบ'}</p>
                       </div>
                     )}
                   </div>
@@ -1328,7 +1398,6 @@ export default function MonitorPage() {
                 <div className="space-y-3 flex flex-col h-full">
                   <h3 className="text-sm font-bold text-white px-1">รายชื่อเซลล์ปัจจุบัน ({salesList.length})</h3>
                   
-                  {/* 🟢 ช่องค้นหาเซลล์ (Autocomplete / Filter) */}
                   <div className="relative px-1">
                     <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input 
