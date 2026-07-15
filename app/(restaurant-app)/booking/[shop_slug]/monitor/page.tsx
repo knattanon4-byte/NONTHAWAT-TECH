@@ -140,7 +140,7 @@ export default function MonitorPage() {
   const [eventLoading, setEventLoading] = useState(false);
   const [eventStatusMsg, setEventStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [eventDate, setEventDate] = useState('');
-  const [eventType, setEventType] = useState<'normal' | 'concert' | 'closed'>('normal');
+  const [eventType, setEventType] = useState<'normal' | 'concert' | 'party' | 'closed'>('normal');
   const [eventTitle, setEventTitle] = useState('');
   const [eventPrice, setEventPrice] = useState(5000);
   const [eventExtraPrice, setEventExtraPrice] = useState(0);
@@ -159,6 +159,9 @@ export default function MonitorPage() {
   const [salesList, setSalesList] = useState<any[]>([]);
   const [newSaleName, setNewSaleName] = useState('');
   const [isSalesLoading, setIsSalesLoading] = useState(false);
+  
+  // 🟢 เพิ่ม State สำหรับการค้นหาเซลล์
+  const [salesSearchQuery, setSalesSearchQuery] = useState('');
 
   const [viewYear, setViewYear] = useState<number>(new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState<number>(new Date().getMonth());
@@ -262,6 +265,13 @@ export default function MonitorPage() {
       triggerNotice('success', 'ลบรายชื่อสำเร็จ', 'ลบเซลล์ออกจากระบบเรียบร้อยแล้ว');
     } catch (err) { triggerNotice('error', 'ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
   };
+
+  // 🟢 คำนวณรายชื่อเซลล์ที่ถูกค้นหา (ฟิลเตอร์แบบเรียลไทม์)
+  const filteredSalesList = useMemo(() => {
+    const q = salesSearchQuery.trim().toLowerCase();
+    if (!q) return salesList;
+    return salesList.filter(s => s.sale_name?.toLowerCase().includes(q));
+  }, [salesList, salesSearchQuery]);
 
   const calendarDays = useMemo(() => {
     const firstDayIndex = new Date(viewYear, viewMonth, 1).getDay();
@@ -439,7 +449,6 @@ export default function MonitorPage() {
      return isConcert && adminTotalPrice > 0;
   }, [adminSelectedDate, eventsMap, adminTotalPrice]);
 
-  // 🟢 ฟังก์ชันสร้างข้อความแจ้งเตือน LINE
   const generateLineMessage = useCallback(() => {
     const ev = eventsMap[adminSelectedDate];
     const isConcert = ev?.event_type === 'concert';
@@ -469,7 +478,6 @@ export default function MonitorPage() {
     return `📣 ลูกค้าจองโต๊ะใหม่ (Walk-in / เซลล์)\n📌 โต๊ะ: ${adminSelectedTables.join(', ')}\n👤 ชื่อ: ${adminForm.name}\n📞 โทร: ${adminForm.phone || '-'}\n👥 จำนวน: ${adminForm.guests} ท่าน\n📅 วันที่: ${adminSelectedDate}\n⏰ เวลา: ${adminForm.time} น.\n🧑‍💼 เซลล์: ${adminForm.saleName || '-'}${vipText}${priceDetails}`;
   }, [adminSelectedDate, eventsMap, adminSelectedTables, adminForm, adminTotalPrice, membersList]);
 
-  // 🟢 STEP 1: ลอจิกฟอร์ม (ข้ามการบันทึกลง DB เพื่อให้เซลล์กด Back ได้)
   const handleAdminFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (adminSelectedTables.length === 0) return;
@@ -485,10 +493,8 @@ export default function MonitorPage() {
     }
 
     if (isAdminSlipRequired) {
-      // ✅ แค่พับหน้าจอไป Step 2 (ยังไม่ล็อกโต๊ะ)
       setAdminBookingStep('payment');
     } else {
-      // ✅ ถ้าไม่ต้องใช้สลิป (จองฟรี) ให้ Insert ลง DB แล้วคอนเฟิร์มเลย
       setIsLockProcessing(true);
       try {
         const randomCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -525,7 +531,6 @@ export default function MonitorPage() {
     }
   };
 
-  // 🟢 STEP 2: ลอจิกอัปโหลดสลิป (Insert ข้อมูลทั้งหมดลง DB เป็นสีเหลือง)
   const handleAdminPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLockProcessing(true);
@@ -539,7 +544,6 @@ export default function MonitorPage() {
       const { data: urlData } = supabase.storage.from('slips').getPublicUrl(fileName);
       const uploadedSlipUrl = urlData.publicUrl;
 
-      // 🟢 นำข้อมูลทั้งหมดแพ็คใส่ DB ตรงนี้ (ตั้งสถานะเป็น pending เพื่อรอแอดมินเช็คสลิป)
       const randomCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
       const newBookings = adminSelectedTables.map(table => ({
         shop_id: shopSlug,
@@ -550,7 +554,7 @@ export default function MonitorPage() {
         booking_time: `${adminForm.time}:00`,
         guests_count: adminForm.guests,
         table_number: table,
-        status: 'pending', // <--- ระบบตั้งให้เป็นรอตรวจสอบ (สีเหลือง)
+        status: 'pending',
         slip_url: uploadedSlipUrl,
         sales_name: adminForm.saleName || null,
         member_code: adminForm.memberCode || null,
@@ -561,7 +565,6 @@ export default function MonitorPage() {
 
       try {
         const lineMessage = generateLineMessage();
-        // 🟢 ส่ง imageUrl พ่วงไปด้วย เผื่อ API หลังบ้านรองรับการส่งรูปภาพตรงๆ
         await fetch('/api/notify-line', { 
            method: 'POST', 
            headers: { 'Content-Type': 'application/json' }, 
@@ -571,8 +574,6 @@ export default function MonitorPage() {
 
       closeAdminLockModal();
       setAdminSelectedTables([]);
-      
-      // แจ้งเตือนแบบใหม่ให้ชัดเจน
       triggerNotice('success', 'ส่งข้อมูลสำเร็จ', `ระบบส่งสลิปโต๊ะ ${adminSelectedTables.join(', ')} เรียบร้อยแล้ว โต๊ะจะแสดงสถานะสีเหลือง (รอตรวจสอบ) จนกว่าแอดมินจะกดยืนยันยอดครับ`);
     } catch (err: any) {
       triggerNotice('error', 'ข้อผิดพลาด', err.message || 'ไม่สามารถบันทึกสลิปได้');
@@ -608,7 +609,7 @@ export default function MonitorPage() {
     setEventLoading(true); setEventStatusMsg(null);
     try {
       let uploadedImageUrl = imagePreview || '';
-      if (imageFile && eventType === 'concert') {
+      if (imageFile && (eventType === 'concert' || eventType === 'party')) {
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `${shopSlug}-${eventDate}-${Math.floor(1000 + Math.random() * 9000)}.${fileExt}`;
         const filePath = `${fileName}`;
@@ -622,16 +623,16 @@ export default function MonitorPage() {
         shop_id: shopSlug,
         event_date: eventDate,
         event_type: eventType,
-        title: eventType === 'concert' ? eventTitle : eventType === 'closed' ? 'วันหยุดร้าน' : 'วันบริการปกติ',
-        price: eventType === 'concert' ? eventPrice : 0,
+        title: (eventType === 'concert' || eventType === 'party') ? eventTitle : eventType === 'closed' ? 'วันหยุดร้าน' : 'วันบริการปกติ',
+        price: eventType === 'concert' ? eventPrice : 0, 
         extra_price_per_head: eventType === 'concert' ? eventExtraPrice : 0, 
-        perks_note: eventType === 'concert' ? perksNote : eventType === 'closed' ? 'ปิดรับจองออนไลน์ วันหยุดทำการ' : 'จองฟรี ไม่มีค่าบริการ',
-        image_url: eventType === 'concert' ? uploadedImageUrl : null,
+        perks_note: (eventType === 'concert' || eventType === 'party') ? perksNote : eventType === 'closed' ? 'ปิดรับจองออนไลน์ วันหยุดทำการ' : 'จองฟรี ไม่มีค่าบริการ',
+        image_url: (eventType === 'concert' || eventType === 'party') ? uploadedImageUrl : null,
       };
 
       const { error: dbError = null } = await supabase.from('shop_events').upsert([eventData], { onConflict: 'shop_id,event_date' });
       if (dbError) throw dbError;
-      setEventStatusMsg({ type: 'success', text: `🎉 ตั้งค่าโหมด ${eventType === 'concert' ? 'วันคอนเสิร์ต' : eventType === 'closed' ? 'วันหยุดร้าน' : 'วันปกติ'} เรียบร้อยแล้ว` });
+      setEventStatusMsg({ type: 'success', text: `🎉 ตั้งค่าโหมด ${eventType === 'concert' ? 'วันคอนเสิร์ต' : eventType === 'party' ? 'ปาร์ตี้/กิจกรรม' : eventType === 'closed' ? 'วันหยุดร้าน' : 'วันปกติ'} เรียบร้อยแล้ว` });
       await loadEventsData(); 
     } catch (err: any) { console.error(err); setEventStatusMsg({ type: 'error', text: err.message || 'ระบบบันทึกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' }); } finally { setEventLoading(false); }
   };
@@ -763,7 +764,7 @@ export default function MonitorPage() {
           <div className="flex flex-wrap items-center justify-start xl:justify-end gap-2 z-50">
             {role === 'owner' && (
               <>
-                <button type="button" onClick={() => { setIsSalesModalOpen(true); loadSales(); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-[#00F5D4] bg-[#00F5D4]/10 border-[#00F5D4]/20 hover:bg-[#00F5D4]/20"><Briefcase size={14} className="hidden sm:block" />จัดการเซลล์</button>
+                <button type="button" onClick={() => { setIsSalesModalOpen(true); loadSales(); setSalesSearchQuery(''); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-[#00F5D4] bg-[#00F5D4]/10 border-[#00F5D4]/20 hover:bg-[#00F5D4]/20"><Briefcase size={14} className="hidden sm:block" />จัดการเซลล์</button>
                 <button type="button" onClick={() => { setIsMemberModalOpen(true); loadMembers(); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20"><Crown size={14} className="hidden sm:block" />จัดการ VIP</button>
                 <button type="button" onClick={() => { setIsEventModalOpen(true); setEventStatusMsg(null); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-pink-400 bg-pink-500/10 border-pink-500/20 hover:bg-pink-500/20"><Music size={14} className="hidden sm:block" />ปฏิทินร้าน</button>
                 <div className="relative">
@@ -847,6 +848,11 @@ export default function MonitorPage() {
                         {dayEvent && dayEvent.event_type === 'concert' && (
                           <span className="text-[11px] px-2.5 py-0.5 rounded-md font-bold border font-sans animate-pulse" style={{ backgroundColor: `${THEME.pink}10`, borderColor: `${THEME.pink}40`, color: THEME.pink }}>
                             🎵 โหมดอีเวนต์: {dayEvent.title} (บัตรเหมาต่อโต๊ะ {dayEvent.price.toLocaleString()}.-)
+                          </span>
+                        )}
+                        {dayEvent && dayEvent.event_type === 'party' && (
+                          <span className="text-[11px] px-2.5 py-0.5 rounded-md font-bold border font-sans animate-pulse" style={{ backgroundColor: `${THEME.gold}10`, borderColor: `${THEME.gold}40`, color: THEME.gold }}>
+                            🎉 ปาร์ตี้/กิจกรรม: {dayEvent.title}
                           </span>
                         )}
                         {dayEvent && dayEvent.event_type === 'closed' && (
@@ -1037,7 +1043,7 @@ export default function MonitorPage() {
                         className="py-3 rounded-xl text-xs font-bold text-black flex items-center justify-center gap-1.5 transition-transform active:scale-95 shadow-[0_0_15px_rgba(229,184,66,0.2)]"
                         style={{ backgroundColor: THEME.gold }}
                       >
-                        <Check size={14} className="stroke-[3]"/>
+                        <Check size={14} className="stroke-[3]" />
                         ยืนยันรับยอดเงิน
                       </button>
                     </>
@@ -1075,7 +1081,7 @@ export default function MonitorPage() {
                     <form onSubmit={handleAdminFormSubmit} className="space-y-4 animate-fade-in">
                       <div className="flex items-center gap-3 mb-2">
                         <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                          <User size={20}/>
+                          <User size={20} />
                         </div>
                         <div>
                           <h3 className="text-base font-extrabold text-white">สำรองโต๊ะ (Walk-in / Sale)</h3>
@@ -1112,7 +1118,7 @@ export default function MonitorPage() {
                       <div className="space-y-3 bg-black/40 p-4 rounded-xl border border-slate-800">
                         <div className="grid grid-cols-1 gap-3">
                           <div>
-                            <label className="block text-xs font-semibold mb-1 text-[#00F5D4] flex items-center gap-1"><Briefcase size={13}/> เซลล์ผู้รับผิดชอบ (ถ้ามี)</label>
+                            <label className="block text-xs font-semibold mb-1 text-[#00F5D4] flex items-center gap-1"><Briefcase size={13} /> เซลล์ผู้รับผิดชอบ (ถ้ามี)</label>
                             <input 
                               list="sales-list" 
                               placeholder="พิมพ์หรือเลือกชื่อเซลล์" 
@@ -1126,7 +1132,7 @@ export default function MonitorPage() {
                           </div>
                           
                           <div>
-                            <label className="block text-xs font-semibold mb-1 text-amber-400 flex items-center gap-1"><Ticket size={13}/> รหัสสมาชิก VIP (ถ้ามี)</label>
+                            <label className="block text-xs font-semibold mb-1 text-amber-400 flex items-center gap-1"><Ticket size={13} /> รหัสสมาชิก VIP (ถ้ามี)</label>
                             <input 
                               type="text" 
                               placeholder="กรอกโค้ดเพื่อรับสิทธิ์จองฟรี/ส่วนลด" 
@@ -1251,7 +1257,7 @@ export default function MonitorPage() {
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[80] transition-all overflow-y-auto">
             <div className="w-full max-w-2xl rounded-2xl p-6 border my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
               <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: THEME.border }}>
-                <div className="flex items-center gap-2"><Crown style={{ color: THEME.gold }} size={20} /><h2 className="text-xl font-bold tracking-tight text-white">จัดการระบบสมาชิก VIP</h2></div>
+                <div className="flex items-center gap-2"><Crown size={20} style={{ color: THEME.gold }} /><h2 className="text-xl font-bold tracking-tight text-white">จัดการระบบสมาชิก VIP</h2></div>
                 <button onClick={() => setIsMemberModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
               </div>
               
@@ -1271,7 +1277,7 @@ export default function MonitorPage() {
                   </button>
                 </form>
 
-                <div className="space-y-3">
+                <div className="space-y-3 flex flex-col h-full">
                   <h3 className="text-sm font-bold text-white px-1">รายชื่อ VIP ในระบบ ({membersList.length})</h3>
                   <div className="h-[200px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                     {membersList.length > 0 ? membersList.map((m) => (
@@ -1303,7 +1309,7 @@ export default function MonitorPage() {
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[80] transition-all overflow-y-auto">
             <div className="w-full max-w-2xl rounded-2xl p-6 border my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
               <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: THEME.border }}>
-                <div className="flex items-center gap-2"><Briefcase className="text-[#00F5D4]" size={20} /><h2 className="text-xl font-bold tracking-tight text-white">จัดการรายชื่อเซลล์หน้าร้าน</h2></div>
+                <div className="flex items-center gap-2"><Briefcase size={20} className="text-[#00F5D4]" /><h2 className="text-xl font-bold tracking-tight text-white">จัดการรายชื่อเซลล์หน้าร้าน</h2></div>
                 <button onClick={() => setIsSalesModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
               </div>
               
@@ -1319,13 +1325,26 @@ export default function MonitorPage() {
                   </button>
                 </form>
 
-                <div className="space-y-3">
+                <div className="space-y-3 flex flex-col h-full">
                   <h3 className="text-sm font-bold text-white px-1">รายชื่อเซลล์ปัจจุบัน ({salesList.length})</h3>
+                  
+                  {/* 🟢 ช่องค้นหาเซลล์ (Autocomplete / Filter) */}
+                  <div className="relative px-1">
+                    <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input 
+                      type="text" 
+                      placeholder="ค้นหาชื่อเซลล์..." 
+                      value={salesSearchQuery}
+                      onChange={(e) => setSalesSearchQuery(e.target.value)}
+                      className="w-full bg-black/40 border border-slate-700 rounded-xl pl-9 pr-3 h-9 text-white outline-none focus:border-[#00F5D4] text-xs transition-colors"
+                    />
+                  </div>
+
                   <div className="h-[150px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                    {salesList.length > 0 ? salesList.map((s) => (
+                    {filteredSalesList.length > 0 ? filteredSalesList.map((s) => (
                       <div key={s.id} className="p-3 bg-black/40 border rounded-xl flex items-center justify-between group" style={{ borderColor: THEME.border }}>
                         <div className="min-w-0 flex items-center gap-2">
-                          <User size={14} className="text-slate-400"/>
+                          <User size={14} className="text-slate-400" />
                           <p className="text-sm font-bold text-white truncate">{s.sale_name}</p>
                         </div>
                         <button onClick={() => handleDeleteSale(s.id)} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="ลบเซลล์นี้">
@@ -1333,9 +1352,9 @@ export default function MonitorPage() {
                         </button>
                       </div>
                     )) : (
-                      <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
+                      <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2 pt-4">
                         <Briefcase size={24} className="opacity-20" />
-                        <p className="text-xs">ยังไม่มีรายชื่อเซลล์</p>
+                        <p className="text-xs">{salesSearchQuery ? 'ไม่พบชื่อเซลล์ที่ค้นหา' : 'ยังไม่มีรายชื่อเซลล์'}</p>
                       </div>
                     )}
                   </div>
@@ -1364,7 +1383,7 @@ export default function MonitorPage() {
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[80] transition-all overflow-y-auto">
           <div className="w-full max-w-2xl rounded-2xl p-6 border my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
             <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: THEME.border }}>
-              <div className="flex items-center gap-2"><Music style={{ color: THEME.pink }} size={20} /><h2 className="text-xl font-bold tracking-tight text-white">ตั้งค่าปฏิทินร้านและอีเวนต์</h2></div>
+              <div className="flex items-center gap-2"><Music size={20} style={{ color: THEME.pink }} /><h2 className="text-xl font-bold tracking-tight text-white">ตั้งค่าปฏิทินร้านและอีเวนต์</h2></div>
               <button onClick={() => { setIsEventModalOpen(false); }} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
             </div>
             <form onSubmit={handleCreateEventSubmit} className="space-y-5 text-sm">
@@ -1386,18 +1405,20 @@ export default function MonitorPage() {
                       const ev = eventsMap[checkDateStr];
                       const isClosed = ev?.event_type === 'closed';
                       const isConcert = ev?.event_type === 'concert';
+                      const isParty = ev?.event_type === 'party';
 
                       return (
                         <button
                           key={`day-${day}`} type="button" onClick={() => selectDateHandler(day)}
                           className={`h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center relative ${isSelected ? 'shadow-md' : 'hover:bg-white/10 border border-transparent'}`}
                           style={{ 
-                            backgroundColor: isSelected ? (isClosed ? '#EF4444' : THEME.pink) : (isClosed ? 'rgba(239,68,68,0.2)' : ''), 
+                            backgroundColor: isSelected ? (isClosed ? '#EF4444' : isParty ? THEME.gold : THEME.pink) : (isClosed ? 'rgba(239,68,68,0.2)' : ''), 
                             color: isClosed && !isSelected ? '#EF4444' : 'white'
                           }}
                         >
                           {day}
                           {isConcert && !isSelected && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-pink-500"></span>}
+                          {isParty && !isSelected && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
                         </button>
                       );
                     })}
@@ -1407,10 +1428,11 @@ export default function MonitorPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider text-slate-300">ประเภทของวัน</label>
-                    <div className="grid grid-cols-3 gap-1.5 bg-black/30 p-1 rounded-xl border h-11 items-center" style={{ borderColor: THEME.border }}>
-                      <button type="button" onClick={() => { setEventType('normal'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'normal' ? THEME.purple : 'transparent', color: 'white' }}>วันปกติ (ฟรี)</button>
-                      <button type="button" onClick={() => { setEventType('concert'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'concert' ? THEME.pink : 'transparent', color: 'white' }}>🚀 คอนเสิร์ต</button>
-                      <button type="button" onClick={() => { setEventType('closed'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'closed' ? '#EF4444' : 'transparent', color: 'white' }}>🛑 วันหยุดร้าน</button>
+                    <div className="grid grid-cols-4 gap-1.5 bg-black/30 p-1 rounded-xl border h-11 items-center" style={{ borderColor: THEME.border }}>
+                      <button type="button" onClick={() => { setEventType('normal'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'normal' ? THEME.purple : 'transparent', color: 'white' }}>ปกติ</button>
+                      <button type="button" onClick={() => { setEventType('concert'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'concert' ? THEME.pink : 'transparent', color: 'white' }}>คอนเสิร์ต</button>
+                      <button type="button" onClick={() => { setEventType('party'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'party' ? THEME.gold : 'transparent', color: 'white' }}>🎉 ปาร์ตี้</button>
+                      <button type="button" onClick={() => { setEventType('closed'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'closed' ? '#EF4444' : 'transparent', color: 'white' }}>หยุด</button>
                     </div>
                   </div>
                   
@@ -1421,37 +1443,47 @@ export default function MonitorPage() {
                     </div>
                   )}
 
-                  {eventType === 'concert' && (
+                  {(eventType === 'concert' || eventType === 'party') && (
                     <div className="space-y-4 pt-1 animate-fade-in">
                       <div className="grid grid-cols-1 gap-3">
-                        <div><label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อคอนเสิร์ต / ศิลปิน</label><input type="text" placeholder="e.g. Three Man Down Live" value={eventTitle} onChange={(e) => { setEventTitle(e.target.value); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500" style={{ borderColor: THEME.border }} /></div>
-                        
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-semibold mb-1 text-gray-300">ราคาเหมา (บาท/โต๊ะ)</label>
-                            <div className="relative flex items-center">
-                              <DollarSign size={15} className="absolute left-3.5 text-amber-400" />
-                              <input type="number" value={eventPrice} onChange={(e) => { setEventPrice(Number(e.target.value)); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-amber-500 font-mono" style={{ borderColor: THEME.border }} />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold mb-1 text-gray-300">เสริมเกิน 4 คน (บาท/คน)</label>
-                            <div className="relative flex items-center">
-                              <Plus size={15} className="absolute left-3.5 text-pink-400" />
-                              <input type="number" value={eventExtraPrice} onChange={(e) => { setEventExtraPrice(Number(e.target.value)); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono" style={{ borderColor: THEME.border }} />
-                            </div>
-                          </div>
+                        <div>
+                          <label className="block text-xs font-semibold mb-1 text-gray-300">
+                            {eventType === 'concert' ? 'ชื่อคอนเสิร์ต / ศิลปิน' : 'ชื่อปาร์ตี้ / กิจกรรม'}
+                          </label>
+                          <input type="text" placeholder={eventType === 'concert' ? "e.g. Three Man Down Live" : "e.g. โชว์นางแบบพิเศษ"} value={eventTitle} onChange={(e) => { setEventTitle(e.target.value); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500" style={{ borderColor: THEME.border }} />
                         </div>
                         
+                        {eventType === 'concert' && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-semibold mb-1 text-gray-300">ราคาเหมา (บาท/โต๊ะ)</label>
+                              <div className="relative flex items-center">
+                                <DollarSign size={15} className="absolute left-3.5 text-amber-400" />
+                                <input type="number" value={eventPrice} onChange={(e) => { setEventPrice(Number(e.target.value)); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-amber-500 font-mono" style={{ borderColor: THEME.border }} />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold mb-1 text-gray-300">เสริมเกิน 4 คน (บาท/คน)</label>
+                              <div className="relative flex items-center">
+                                <Plus size={15} className="absolute left-3.5 text-pink-400" />
+                                <input type="number" value={eventExtraPrice} onChange={(e) => { setEventExtraPrice(Number(e.target.value)); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono" style={{ borderColor: THEME.border }} />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
                       </div>
-                      <div><label className="block text-xs font-semibold mb-1 text-gray-300 flex items-center gap-1"><FileText size={13} /> รายละเอียดของแถม</label><textarea rows={3} placeholder="ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." value={perksNote} onChange={(e) => { setPerksNote(e.target.value); }} className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" style={{ borderColor: THEME.border }} /></div>
+                      <div>
+                        <label className="block text-xs font-semibold mb-1 text-gray-300 flex items-center gap-1"><FileText size={13} /> รายละเอียดของแถม/กิจกรรม</label>
+                        <textarea rows={3} placeholder={eventType === 'concert' ? "ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." : "รายละเอียดปาร์ตี้..."} value={perksNote} onChange={(e) => { setPerksNote(e.target.value); }} className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" style={{ borderColor: THEME.border }} />
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
-              {eventType === 'concert' && (
+              {(eventType === 'concert' || eventType === 'party') && (
                 <div className="animate-fade-in mt-2">
-                  <label className="block text-xs font-semibold mb-1.5 text-gray-300 flex items-center gap-1"><ImageIcon size={13} /> รูปภาพโปสเตอร์ศิลปิน</label>
+                  <label className="block text-xs font-semibold mb-1.5 text-gray-300 flex items-center gap-1"><ImageIcon size={13} /> รูปภาพโปสเตอร์</label>
                   <div className="relative h-48 w-full border border-dashed rounded-xl flex flex-col items-center justify-center bg-black/20 cursor-pointer overflow-hidden group transition-all" style={{ borderColor: THEME.border }}>
                     <input type="file" accept="image/*" onChange={handleImageChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                     {imagePreview ? (<><img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center z-0"><ImageIcon size={24} className="text-white mb-1.5" /><p className="text-xs font-bold text-white">คลิกเพื่อเปลี่ยนรูปโปสเตอร์</p></div></>) : (<div className="flex flex-col items-center justify-center"><div className="p-3 bg-pink-500/10 rounded-full mb-2.5"><ImageIcon size={24} className="text-pink-500" /></div><p className="text-xs font-bold text-gray-200">คลิกเลือกหรือลากรูปภาพมาวาง</p></div>)}
@@ -1472,7 +1504,7 @@ export default function MonitorPage() {
       {isReportModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[90] transition-all">
           <div className="w-full max-w-md rounded-2xl p-6 border" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
-            <div className="flex items-center gap-2 mb-4"><AlertTriangle style={{ color: THEME.gold }} size={20} /><h2 className="text-xl font-bold tracking-tight text-white">รายงานปัญหาคิวจองระบบ</h2></div>
+            <div className="flex items-center gap-2 mb-4"><AlertTriangle size={20} style={{ color: THEME.gold }} /><h2 className="text-xl font-bold tracking-tight text-white">รายงานปัญหาคิวจองระบบ</h2></div>
             <form onSubmit={handleSendReport} className="space-y-4 text-sm">
               <div><label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">สาขาที่รายงาน</label><div className="w-full px-3 py-2.5 rounded-xl border text-sm font-bold bg-black/40 text-slate-400 border-slate-800" style={{ borderColor: THEME.border }}>🏢 {shopName}</div></div>
               <div><label className="block text-xs font-mono mb-1.5 uppercase tracking-wider">ประเภทปัญหา</label><div className="relative flex items-center rounded-xl bg-black/40 border" style={{ borderColor: THEME.border }}><select value={reportForm.issueType} onChange={e => setReportForm({...reportForm, issueType: e.target.value})} className="w-full cursor-pointer appearance-none bg-transparent py-2.5 pl-3 pr-10 text-sm outline-none text-white"><option value="UI Bug / หน้าเว็บเพี้ยน" style={{ backgroundColor: THEME.card }}>UI Bug / หน้าเว็บเพี้ยน</option><option value="ระบบจองขัดข้อง" style={{ backgroundColor: THEME.card }}>ระบบจองขัดข้อง</option><option value="ข้อมูลไม่ตรงความเป็นจริง" style={{ backgroundColor: THEME.card }}>ข้อมูลไม่ตรงความเป็นจริง</option><option value="อื่นๆ" style={{ backgroundColor: THEME.card }}>อื่นๆ</option></select><ChevronDown size={16} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} /></div></div>
@@ -1484,8 +1516,11 @@ export default function MonitorPage() {
       )}
 
       <style jsx global>{`
-        .custom-date-hide-icon::-webkit-calendar-picker-indicator { background: transparent; bottom: 0; color: transparent; cursor: pointer; height: auto; left: 0; position: absolute; right: 0; top: 0; width: auto; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .color-scheme-dark { color-scheme: dark; }
+        .box-sizing-border { box-sizing: border-box; }
+        input[type="date"]::-webkit-date-and-time-value { color: #F1F1F5 !important; text-align: left; display: flex; align-items: center; min-height: 100% !important; height: 100% !important; padding: 0 !important; margin: 0 !important; }
+        input[type="date"] { appearance: none !important; -webkit-appearance: none !important; color-scheme: dark !important; color: #F1F1F5 !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.1); border-radius: 10px; }
       `}</style>
@@ -1543,12 +1578,12 @@ function BookingCard({
         <div className="mt-3 grid grid-cols-2 gap-y-1.5 text-[11px]">
           {booking.sales_name ? (
              <div className="col-span-2 flex items-center gap-1.5 text-[#00F5D4] bg-[#00F5D4]/5 rounded px-1.5 py-0.5 border border-[#00F5D4]/20 truncate">
-               <Briefcase size={12}/> <span className="truncate">เซลล์: {booking.sales_name}</span>
+               <Briefcase size={12} /> <span className="truncate">เซลล์: {booking.sales_name}</span>
              </div>
           ) : null}
           {booking.member_code ? (
              <div className="col-span-2 flex items-center gap-1.5 text-amber-400 bg-amber-500/5 rounded px-1.5 py-0.5 border border-amber-500/20 truncate">
-               <Ticket size={12}/> <span className="font-mono truncate">{booking.member_code}</span>
+               <Ticket size={12} /> <span className="font-mono truncate">{booking.member_code}</span>
              </div>
           ) : null}
         </div>

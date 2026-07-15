@@ -126,7 +126,8 @@ export default function BookingPage() {
     const fetchUpcomingConcerts = async () => {
       const { data } = await supabase.from('shop_events').select('*').eq('shop_id', shopSlug).gte('event_date', todayStr).order('event_date', { ascending: true });
       if (data) {
-        setUpcomingConcerts(data.filter((e: any) => e.event_type === 'concert'));
+        // 🟢 ดึงข้อมูลมาทั้ง concert และ party
+        setUpcomingConcerts(data.filter((e: any) => e.event_type === 'concert' || e.event_type === 'party'));
         const mapped = data.reduce((acc, curr: any) => ({ ...acc, [curr.event_date]: curr }), {} as Record<string, any>);
         setEventsMap(mapped);
       }
@@ -137,15 +138,16 @@ export default function BookingPage() {
   useEffect(() => {
     if (!bookingDate) return;
     const eventData = eventsMap[bookingDate];
-    if (eventData && eventData.event_type === 'concert') {
+    // 🟢 เช็คว่าถ้าเป็น concert หรือ party ให้โชว์ป๊อปอัป
+    if (eventData && (eventData.event_type === 'concert' || eventData.event_type === 'party')) {
       setConcertEvent(eventData);
       setShowConcertModal(true); 
       setCurrentEventPrice(eventData.price || 0);
-      setCurrentEventExtraPrice(eventData.extra_price_per_head || 0); // 🟢 โหลดราคาส่วนเสริม
+      setCurrentEventExtraPrice(eventData.extra_price_per_head || 0); 
     } else {
       setConcertEvent(null);
       setCurrentEventPrice(0);
-      setCurrentEventExtraPrice(0); // 🟢 รีเซ็ตราคาส่วนเสริม
+      setCurrentEventExtraPrice(0); 
     }
   }, [bookingDate, eventsMap]);
 
@@ -255,11 +257,10 @@ export default function BookingPage() {
 
     setVerifiedMember(vipData); 
     setCurrentEventPrice(eventData?.price || 0);
-    setCurrentEventExtraPrice(eventData?.extra_price_per_head || 0); // โหลดราคาเสริมเข้ามา
+    setCurrentEventExtraPrice(eventData?.extra_price_per_head || 0); 
     setShowConfirmModal(true);
   };
 
-  // 🟢 คำนวณราคาแบบใหม่ (มีบวกราคาคนเสริม ถ้าเกินโควต้า 4 คน/โต๊ะ)
   const baseAllowedGuests = selectedTables.length * 4;
   const extraGuests = Math.max(0, guestsCount - baseAllowedGuests);
   
@@ -426,24 +427,24 @@ export default function BookingPage() {
                 <button type="button" onClick={() => setShowConcertListModal(true)} className="w-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-xl p-3.5 flex items-center justify-between hover:bg-pink-500/30 transition-all group">
                   <div className="flex items-center gap-2.5">
                     <div className="bg-pink-500 text-white p-2 rounded-lg group-hover:scale-110 transition-transform"><Music size={18} /></div>
-                    <span className="font-bold text-base text-pink-100 tracking-wide">ดูตารางปาร์ตี้คอนเสิร์ตทั้งหมด 🎉</span>
+                    <span className="font-bold text-base text-pink-100 tracking-wide">ดูตารางปาร์ตี้และอีเวนต์ทั้งหมด 🎉</span>
                   </div>
                   <ArrowRight size={18} className="text-pink-400 group-hover:translate-x-1 transition-transform" />
                 </button>
               )}
 
-              <div className="w-full bg-black/30 p-5 rounded-2xl border" style={{ borderColor: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? THEME.pink : `${THEME.gold}20` }}>
+              <div className="w-full bg-black/30 p-5 rounded-2xl border" style={{ borderColor: bookingDate && (eventsMap[bookingDate]?.event_type === 'concert' || eventsMap[bookingDate]?.event_type === 'party') ? THEME.pink : `${THEME.gold}20` }}>
                 <div className="space-y-2 w-full min-w-0">
                   <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 font-mono" style={{ color: THEME.gold }}>
                     <Calendar size={18} /> 1. เลือกวันที่ต้องการจอง
                   </label>
-                  <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-14 transition-all duration-300 focus-within:border-amber-400" style={{ borderColor: THEME.border, boxShadow: bookingDate && eventsMap[bookingDate]?.event_type === 'concert' ? `0 0 15px ${THEME.pink}40` : 'none' }}>
+                  <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-14 transition-all duration-300 focus-within:border-amber-400" style={{ borderColor: THEME.border, boxShadow: bookingDate && (eventsMap[bookingDate]?.event_type === 'concert' || eventsMap[bookingDate]?.event_type === 'party') ? `0 0 15px ${THEME.pink}40` : 'none' }}>
                     <input type="date" required min={todayStr} max={maxDateStr} value={bookingDate} onChange={handleDateSelection} className="w-full h-full appearance-none bg-transparent px-4 text-white outline-none text-lg color-scheme-dark block min-w-0 box-border iOS-date-input" />
                   </div>
                   <AnimatePresence>
-                    {bookingDate && eventsMap[bookingDate]?.event_type === 'concert' && (
-                      <motion.div initial={{ opacity: 0, y: -10, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: -10, height: 0 }} className="text-sm font-bold flex items-center gap-1.5 px-2 pt-1.5" style={{ color: THEME.pink }}>
-                        <Music size={16} className="animate-pulse" /> วันนี้มีอีเวนต์พิเศษ: {eventsMap[bookingDate].title}
+                    {bookingDate && (eventsMap[bookingDate]?.event_type === 'concert' || eventsMap[bookingDate]?.event_type === 'party') && (
+                      <motion.div initial={{ opacity: 0, y: -10, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: -10, height: 0 }} className="text-sm font-bold flex items-center gap-1.5 px-2 pt-1.5" style={{ color: eventsMap[bookingDate].event_type === 'party' ? THEME.gold : THEME.pink }}>
+                        <Music size={16} className="animate-pulse" /> วันนี้มี{eventsMap[bookingDate].event_type === 'party' ? 'ปาร์ตี้/กิจกรรม' : 'อีเวนต์พิเศษ'}: {eventsMap[bookingDate].title}
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -629,7 +630,7 @@ export default function BookingPage() {
               <div className="grid grid-cols-2 gap-4 mt-8">
                 <button type="button" onClick={() => setShowConfirmModal(false)} className="py-3.5 rounded-xl text-base font-bold text-gray-400 hover:text-white bg-black/40 hover:bg-white/10 transition-colors border border-white/5">กลับไปแก้ไข</button>
                 <button type="button" onClick={executeBooking} disabled={loading || (calculatedTotalAmount > 0 && !slipFile)} className="py-3.5 rounded-xl text-base font-bold text-black bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95 disabled:opacity-50 disabled:grayscale">
-                  {loading ? <Loader2 size={20} className="animate-spin mx-auto"/> : calculatedTotalAmount === 0 ? 'ยืนยันรับสิทธิ์ฟรี' : 'ยืนยันและส่งสลิป'}
+                  {loading ? <Loader2 size={20} className="animate-spin mx-auto"/> : calculatedTotalAmount === 0 ? 'ยืนยันการจอง' : 'ยืนยันและส่งสลิป'}
                 </button>
               </div>
             </motion.div>
@@ -643,7 +644,7 @@ export default function BookingPage() {
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowConcertListModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className="w-full max-w-md h-[80vh] flex flex-col relative overflow-hidden rounded-3xl z-10 shadow-2xl bg-[#16161E] border border-[#2D2235]">
-              <div className="flex items-center justify-between p-5 border-b border-white/5 bg-black/20"><h2 className="text-xl font-bold text-white flex items-center gap-2"><Music className="text-pink-500"/> ตารางคอนเสิร์ต / ปาร์ตี้</h2><button onClick={() => setShowConcertListModal(false)} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10"><X size={22}/></button></div>
+              <div className="flex items-center justify-between p-5 border-b border-white/5 bg-black/20"><h2 className="text-xl font-bold text-white flex items-center gap-2"><Music className="text-pink-500"/> ตารางอีเวนต์ / ปาร์ตี้</h2><button onClick={() => setShowConcertListModal(false)} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10"><X size={22}/></button></div>
               <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
                 {upcomingConcerts.length > 0 ? upcomingConcerts.map((concert) => (
                   <div key={concert.id} className="bg-black/40 border border-slate-800 rounded-2xl overflow-hidden flex flex-col group hover:border-pink-500/50 transition-colors">
@@ -651,42 +652,56 @@ export default function BookingPage() {
                     <div className="p-5 space-y-2.5">
                       <div className="flex justify-between items-start"><h3 className="font-bold text-white text-xl leading-tight">{concert.title}</h3><span className="text-sm bg-pink-500/20 text-pink-400 px-2.5 py-1 rounded-md font-bold whitespace-nowrap ml-2">{concert.event_date}</span></div>
                       
-                      {/* 🟢 อัปเดต UI หน้าดูคอนเสิร์ตให้มีแจ้งราคาบัตรเสริม */}
-                      <p className="text-amber-400 font-bold text-base">บัตรเหมาต่อโต๊ะ: {concert.price.toLocaleString()} THB</p>
-                      {concert.extra_price_per_head > 0 && (
-                        <p className="text-pink-400 font-bold text-sm -mt-1">บัตรเสริม (เกิน 4 ท่าน): {concert.extra_price_per_head.toLocaleString()} THB/คน</p>
+                      {/* 🟢 อัปเดต UI แยกคอนเสิร์ตกับปาร์ตี้ */}
+                      {concert.event_type === 'concert' ? (
+                        <>
+                          <p className="text-amber-400 font-bold text-base">บัตรเหมาต่อโต๊ะ: {concert.price?.toLocaleString()} THB</p>
+                          {concert.extra_price_per_head > 0 && (
+                            <p className="text-pink-400 font-bold text-sm -mt-1">บัตรเสริม (เกิน 4 ท่าน): {concert.extra_price_per_head?.toLocaleString()} THB/คน</p>
+                          )}
+                        </>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-[#00F5D4]">🎉 งานปาร์ตี้ / กิจกรรมพิเศษ</p>
+                          <p className="text-xs text-gray-400 line-clamp-2">{concert.perks_note}</p>
+                        </div>
                       )}
 
-                      {concert.perks_note && (<div className="pt-3 mt-3 border-t border-white/5"><p className="text-xs text-slate-400 font-bold mb-1.5">หมายเหตุและเงื่อนไข:</p><p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">{concert.perks_note}</p></div>)}
-                      <button onClick={() => { setBookingDate(concert.event_date); setShowConcertListModal(false); }} className="w-full mt-4 py-3 bg-white/5 hover:bg-pink-500 hover:text-white text-slate-300 rounded-xl text-base font-bold transition-all border border-slate-700 hover:border-pink-500">เลือกคอนเสิร์ตนี้</button>
+                      {concert.perks_note && concert.event_type === 'concert' && (<div className="pt-3 mt-3 border-t border-white/5"><p className="text-xs text-slate-400 font-bold mb-1.5">หมายเหตุและเงื่อนไข:</p><p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">{concert.perks_note}</p></div>)}
+                      <button onClick={() => { setBookingDate(concert.event_date); setShowConcertListModal(false); }} className="w-full mt-4 py-3 bg-white/5 hover:bg-pink-500 hover:text-white text-slate-300 rounded-xl text-base font-bold transition-all border border-slate-700 hover:border-pink-500">เลือกจองคิววันนี้</button>
                     </div>
                   </div>
-                )) : (<div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-3"><Music size={40} className="opacity-20" /><p className="text-base">ยังไม่มีคิวงานคอนเสิร์ตในขณะนี้</p></div>)}
+                )) : (<div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-3"><Music size={40} className="opacity-20" /><p className="text-base">ยังไม่มีคิวงานกิจกรรมในขณะนี้</p></div>)}
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* POP-UP CONCERT */}
+      {/* POP-UP EVENT DETAILS */}
       <AnimatePresence>
         {showConcertModal && concertEvent && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setShowConcertModal(false); setBookingDate(''); }} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className="w-full max-w-sm min-h-[500px] relative overflow-hidden rounded-[2rem] z-10 flex flex-col justify-end shadow-2xl" style={{ backgroundColor: THEME.card }}>
               <button onClick={() => { setShowConcertModal(false); setBookingDate(''); }} className="absolute right-5 top-5 p-2 rounded-full bg-black/40 backdrop-blur-md text-white hover:bg-black/60 z-20 transition-colors"><X size={20} /></button>
-              {concertEvent.image_url && <img src={concertEvent.image_url} alt="Concert Poster" className="absolute inset-0 w-full h-full object-cover z-0" />}
+              {concertEvent.image_url && <img src={concertEvent.image_url} alt="Event Poster" className="absolute inset-0 w-full h-full object-cover z-0" />}
               <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0E] via-[#0A0A0E]/80 to-transparent z-0 pointer-events-none" />
               <div className="relative z-10 p-6 sm:p-8 flex flex-col items-center text-center w-full mt-auto">
                 <h2 className="text-base font-black text-white bg-black/40 backdrop-blur-md border border-white/10 px-5 py-2 rounded-full mb-3">{concertEvent.event_date}</h2>
-                <h3 className="text-3xl sm:text-4xl font-black text-white mb-5 drop-shadow-lg">{concertEvent.title || 'Concert Event'}</h3>
+                <h3 className="text-3xl sm:text-4xl font-black text-white mb-5 drop-shadow-lg">{concertEvent.title || 'Special Event'}</h3>
                 
-                {/* 🟢 อัปเดต UI อธิบายราคางานคอนเสิร์ต */}
+                {/* 🟢 อัปเดต UI อธิบายราคา (แสดงเฉพาะคอนเสิร์ต ถ้าปาร์ตี้แสดงแค่คำบรรยาย) */}
                 <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-3xl p-6 w-full text-base font-bold shadow-xl whitespace-pre-line leading-relaxed">
-                  {concertEvent.perks_note || `โปรโมชั่นสำหรับวันนี้\nเตรียมพร้อมมาสนุกสุดเหวี่ยง\nไปพร้อมกับศิลปินได้เลย!`}
-                  <br/><br/>
-                  <span className="text-amber-400">ราคาเหมาโต๊ะละ {concertEvent.price?.toLocaleString()} ฿ (นั่งได้ 4 ท่าน)</span>
-                  {concertEvent.extra_price_per_head > 0 && <span className="block text-pink-400 text-sm mt-1">เสริมเกิน 4 ท่าน คิดเพิ่มท่านละ {concertEvent.extra_price_per_head?.toLocaleString()} ฿</span>}
+                  {concertEvent.perks_note || (concertEvent.event_type === 'concert' ? `โปรโมชั่นสำหรับวันนี้\nเตรียมพร้อมมาสนุกสุดเหวี่ยง\nไปพร้อมกับศิลปินได้เลย!` : `เตรียมพบกับกิจกรรมปาร์ตี้สุดพิเศษของเรา!`)}
+                  
+                  {concertEvent.event_type === 'concert' && (
+                    <>
+                      <br/><br/>
+                      <span className="text-amber-400">ราคาเหมาโต๊ะละ {concertEvent.price?.toLocaleString()} ฿ (นั่งได้ 4 ท่าน)</span>
+                      {concertEvent.extra_price_per_head > 0 && <span className="block text-pink-400 text-sm mt-1">เสริมเกิน 4 ท่าน คิดเพิ่มท่านละ {concertEvent.extra_price_per_head?.toLocaleString()} ฿</span>}
+                    </>
+                  )}
                 </div>
 
                 <p className="text-sm text-amber-400 mt-5 font-bold animate-pulse drop-shadow-md">คลิกด้านล่างเพื่อทำการจอง</p>
