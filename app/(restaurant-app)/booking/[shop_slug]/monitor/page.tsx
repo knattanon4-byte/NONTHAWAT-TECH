@@ -15,9 +15,20 @@ import {
   LayoutGrid,  
   Map,         
   Eye,
+  Trash2,
+  Plus,
+  User,
+  Briefcase,
+  Ticket,
+  ChevronLeft, 
+  QrCode,      
   type LucideIcon,
 } from 'lucide-react';
 import FloorPlan from '@/components/booking/FloorPlan'; 
+
+// 🟢 บอสเอาเลขพร้อมเพย์จริงๆ มาใส่ในเครื่องหมายคำพูดนี้ได้เลยครับ (พิมพ์เฉพาะตัวเลขติดกัน)
+// ⚠️ ถ้ายังไม่ใส่ QR Code จะสแกนไม่ได้ ป้องกันการโอนผิดครับ
+const PROMPTPAY_NUMBER = "0922657200"; 
 
 const THEME = {
   bg: '#0A0A0E', card: '#16161E', border: '#2D2235', pink: '#FF1F88',
@@ -26,6 +37,7 @@ const THEME = {
 };
 
 type ZoneId = 'ALL' | 'V' | 'G' | 'A';
+type UserRole = 'owner' | 'reception' | 'sale';
 
 interface ZoneMeta { id: ZoneId; label: string; prefix: string; icon: LucideIcon; accent: string; }
 
@@ -57,7 +69,7 @@ function deriveStatus(b: any): LiveStatus {
 }
 
 const STATUS_META: Record<string, { label: string; color: string; dot: string }> = {
-  pending: { label: '⏳ รอชำระเงิน', color: THEME.amber, dot: THEME.amber },
+  pending: { label: '⏳ รอชำระเงิน/ตรวจสอบ', color: THEME.amber, dot: THEME.amber },
   checked_in: { label: 'มาแล้ว', color: THEME.mint, dot: THEME.mint },
   no_show: { label: 'ไม่มา (NO SHOW)', color: '#F87171', dot: '#EF4444' },
   tonight: { label: 'รอเช็คอิน (คืนนี้)', color: THEME.mint, dot: THEME.mint },
@@ -80,6 +92,8 @@ export default function MonitorPage() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  
+  const [role, setRole] = useState<UserRole>('owner');
 
   const [bookings, setBookings] = useState<any[]>([]);
   const [eventsMap, setEventsMap] = useState<Record<string, any>>({});
@@ -95,7 +109,16 @@ export default function MonitorPage() {
   const [viewMode, setViewMode] = useState<'list' | 'floorplan'>('list');
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const [adminSelectedDate, setAdminSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  
+  const [adminSelectedTables, setAdminSelectedTables] = useState<string[]>([]);
+  
+  const [adminForm, setAdminForm] = useState({ name: '', phone: '', time: '19:00', guests: 4, saleName: '', memberCode: '' });
+  const [adminSlipFile, setAdminSlipFile] = useState<File | null>(null);
+  const [adminSlipPreview, setAdminSlipPreview] = useState<string | null>(null);
+  
+  const [adminBookingStep, setAdminBookingStep] = useState<'form' | 'payment'>('form');
+  const [pendingBookingsData, setPendingBookingsData] = useState<any[]>([]);
+
   const [selectedBookingForSlip, setSelectedBookingForSlip] = useState<any>(null);
 
   const [isLockConfirmModalOpen, setIsLockConfirmModalOpen] = useState(false);
@@ -120,9 +143,22 @@ export default function MonitorPage() {
   const [eventType, setEventType] = useState<'normal' | 'concert' | 'closed'>('normal');
   const [eventTitle, setEventTitle] = useState('');
   const [eventPrice, setEventPrice] = useState(5000);
+  const [eventExtraPrice, setEventExtraPrice] = useState(0);
+
   const [perksNote, setPerksNote] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [membersList, setMembersList] = useState<any[]>([]);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberCode, setNewMemberCode] = useState('');
+  const [isMemberLoading, setIsMemberLoading] = useState(false);
+
+  const [isSalesModalOpen, setIsSalesModalOpen] = useState(false);
+  const [salesList, setSalesList] = useState<any[]>([]);
+  const [newSaleName, setNewSaleName] = useState('');
+  const [isSalesLoading, setIsSalesLoading] = useState(false);
 
   const [viewYear, setViewYear] = useState<number>(new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState<number>(new Date().getMonth());
@@ -130,10 +166,32 @@ export default function MonitorPage() {
   const monthNames = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); setAuthLoading(false); });
+    supabase.auth.getSession().then(({ data: { session }, error }) => { 
+      if (error) {
+        console.warn("เคลียร์ Session เก่าที่พังทิ้ง...");
+        supabase.auth.signOut();
+      }
+      setSession(session); 
+      setAuthLoading(false); 
+      assignRole(session?.user?.email);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { 
+      setSession(session); 
+      setAuthLoading(false); 
+      assignRole(session?.user?.email);
+    });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => { setAdminSelectedTables([]); }, [adminSelectedDate]);
+
+  const assignRole = (email?: string) => {
+    if (!email) return;
+    const lowerEmail = email.toLowerCase();
+    if (lowerEmail.includes('reception')) setRole('reception');
+    else if (lowerEmail.includes('sale')) setRole('sale');
+    else setRole('owner');
+  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setIsLoggingIn(true); setAuthError(null);
@@ -143,8 +201,66 @@ export default function MonitorPage() {
     } catch (err: any) { setAuthError(err.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง'); } finally { setIsLoggingIn(false); }
   };
 
-  const handleLogoutClick = () => {
-    triggerNotice('info', 'ระบบจำกัดสิทธิ์ความปลอดภัย', 'กรุณาใช้ฟังก์ชันของเบราว์เซอร์หรือปิดแท็บเพื่อออกระบบคิวควบคุมหลักอย่างสมบูรณ์แบบครับ');
+  const handleLogoutClick = async () => {
+    try { await supabase.auth.signOut(); setSession(null); setRole('owner'); } catch (error) { console.error('Error logging out:', error); }
+  };
+
+  const loadMembers = useCallback(async () => {
+    const { data } = await supabase.from('shop_members').select('*').eq('shop_id', shopSlug).order('created_at', { ascending: false });
+    if (data) setMembersList(data);
+  }, [shopSlug]);
+
+  const loadSales = useCallback(async () => {
+    const { data } = await supabase.from('shop_sales').select('*').eq('shop_id', shopSlug).order('created_at', { ascending: false });
+    if (data) setSalesList(data);
+  }, [shopSlug]);
+
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemberName || !newMemberCode) return;
+    setIsMemberLoading(true);
+    try {
+      const { error } = await supabase.from('shop_members').insert([{ shop_id: shopSlug, member_code: newMemberCode, member_name: newMemberName }]);
+      if (error) throw error;
+      setNewMemberName(''); setNewMemberCode('');
+      await loadMembers();
+      triggerNotice('success', 'เพิ่มสมาชิกสำเร็จ', 'ลูกค้าสามารถนำรหัสนี้ไปใช้จองโต๊ะได้ทันที');
+    } catch (err: any) {
+      triggerNotice('error', 'เพิ่มสมาชิกไม่สำเร็จ', 'อาจมีรหัสนี้ในระบบแล้ว กรุณาตั้งรหัสใหม่');
+    } finally { setIsMemberLoading(false); }
+  };
+
+  const handleDeleteMember = async (id: string) => {
+    if (!window.confirm('ยืนยันการลบสมาชิก VIP นี้ใช่หรือไม่?')) return;
+    try {
+      await supabase.from('shop_members').delete().eq('id', id);
+      await loadMembers();
+      triggerNotice('success', 'ลบสมาชิกสำเร็จ', 'รหัสนี้จะไม่สามารถใช้เข้าระบบได้อีกต่อไป');
+    } catch (err) { triggerNotice('error', 'ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
+  };
+
+  const handleAddSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSaleName) return;
+    setIsSalesLoading(true);
+    try {
+      const { error } = await supabase.from('shop_sales').insert([{ shop_id: shopSlug, sale_name: newSaleName }]);
+      if (error) throw error;
+      setNewSaleName('');
+      await loadSales();
+      triggerNotice('success', 'เพิ่มเซลล์สำเร็จ', 'รายชื่อเซลล์ถูกอัปเดตเข้าระบบเรียบร้อยแล้ว');
+    } catch (err: any) {
+      triggerNotice('error', 'เพิ่มเซลล์ไม่สำเร็จ', 'เกิดข้อผิดพลาด กรุณาลองใหม่');
+    } finally { setIsSalesLoading(false); }
+  };
+
+  const handleDeleteSale = async (id: string) => {
+    if (!window.confirm('ยืนยันการลบรายชื่อเซลล์นี้ใช่หรือไม่?')) return;
+    try {
+      await supabase.from('shop_sales').delete().eq('id', id);
+      await loadSales();
+      triggerNotice('success', 'ลบรายชื่อสำเร็จ', 'ลบเซลล์ออกจากระบบเรียบร้อยแล้ว');
+    } catch (err) { triggerNotice('error', 'ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
   };
 
   const calendarDays = useMemo(() => {
@@ -178,6 +294,7 @@ export default function MonitorPage() {
       setEventType(ev.event_type || 'normal');
       setEventTitle(ev.title || '');
       setEventPrice(ev.price || 0);
+      setEventExtraPrice(ev.extra_price_per_head || 0); 
       setPerksNote(ev.perks_note || '');
       setImagePreview(ev.image_url || null);
       setImageFile(null); 
@@ -185,6 +302,7 @@ export default function MonitorPage() {
       setEventType('normal');
       setEventTitle('');
       setEventPrice(5000);
+      setEventExtraPrice(0); 
       setPerksNote('');
       setImagePreview(null);
       setImageFile(null);
@@ -197,6 +315,8 @@ export default function MonitorPage() {
     const loadData = async () => {
       try {
         await loadEventsData();
+        await loadMembers(); 
+        await loadSales(); 
         const { data, error: dbError } = await supabase.from('restaurant_bookings').select('*').eq('shop_id', shopSlug).order('booking_date', { ascending: true }).order('booking_time', { ascending: true });
         if (!active) return;
         if (dbError) throw dbError;
@@ -233,7 +353,7 @@ export default function MonitorPage() {
         setLastSync(new Date().toLocaleTimeString('en-GB'));
       }).subscribe();
     return () => { active = false; supabase.removeChannel(channel); };
-  }, [shopSlug, loadEventsData, session, selectedBookingForSlip]);
+  }, [shopSlug, loadEventsData, session, selectedBookingForSlip, loadMembers, loadSales]);
 
   useEffect(() => {
     let active = true;
@@ -253,7 +373,7 @@ export default function MonitorPage() {
       const { error: patchError } = await supabase.from('restaurant_bookings').update({ status: nextStatus }).eq('id', bookingId);
       if (patchError) throw patchError;
       if (nextStatus === 'confirmed') { triggerNotice('success', 'ยืนยันรับยอดเงินสำเร็จ', 'ระบบได้ทำการอนุมัติสิทธิ์ล็อกที่นั่ง และส่งคลื่นอัปเดตสถานะเปลี่ยนโต๊ะอาหารเป็นไฟแดงให้ลูกค้าออนไลน์ทุกรายเรียลไทม์เรียบร้อยแล้วครับ'); } 
-      else if (nextStatus === 'no_show') { triggerNotice('info', 'ปฏิเสธคิวสำเร็จ', 'ระบบได้ทำการปฏิเสธคิวและเคลียร์โต๊ะให้ว่างเรียบร้อยแล้ว'); }
+      else if (nextStatus === 'no_show') { triggerNotice('info', 'ยกเลิกคิวสำเร็จ', 'ระบบได้ทำการยกเลิกคิวและเคลียร์โต๊ะให้ว่างเรียบร้อยแล้ว'); }
     } catch (err) { console.error(err); triggerNotice('error', 'ระบบทำงานขัดข้อง', 'ไม่สามารถเชื่อมต่อเน็ตเวิร์กเพื่อปรับปรุงสถานะคิวได้ในขณะนี้'); }
   };
 
@@ -263,33 +383,222 @@ export default function MonitorPage() {
     catch (err) { console.error(err); triggerNotice('error', 'อัปเดตระบบล้มเหลว', 'ไม่สามารถปรับเปลี่ยนสถานะการเปิดจองของร้านอาหารบนระบบคลาวด์ได้ครับ'); setIsBookingOpen(!targetState); }
   };
 
+  const closeAdminLockModal = () => {
+    setIsLockConfirmModalOpen(false);
+    setTablePendingLock(null);
+    setAdminBookingStep('form');
+    setAdminForm({ name: '', phone: '', time: '19:00', guests: 4, saleName: '', memberCode: '' });
+    setAdminSlipFile(null);
+    setAdminSlipPreview(null);
+    setPendingBookingsData([]);
+  };
+
   const handleAdminLockTableClick = (tableNum: string) => {
     const existingBooking = bookings.find((b) => b.booking_date === adminSelectedDate && b.table_number === tableNum && b.status !== 'no_show');
     if (existingBooking) {
-      if (existingBooking.booking_code?.startsWith('LOCK-')) { setTablePendingLock(tableNum); setLockModalMode('unlock'); setIsLockConfirmModalOpen(true); } 
-      else { triggerNotice('error', 'พื้นที่ถูกจองด้วยสิทธิ์ลูกค้า', `โต๊ะหมายเลข ${tableNum} เป็นคิวชำระเงินของ "คุณ ${existingBooking.customer_name}" ระบบล็อกความปลอดภัยเพื่อป้องกันความสับสนหน้าร้านครับ`); }
+      if (existingBooking.booking_code?.startsWith('LOCK-')) { 
+        setTablePendingLock(tableNum); 
+        setLockModalMode('unlock'); 
+        setIsLockConfirmModalOpen(true); 
+      } else { setSelectedBookingForSlip(existingBooking); }
       return;
     }
-    setTablePendingLock(tableNum); setLockModalMode('lock'); setIsLockConfirmModalOpen(true); 
+
+    const today = new Date().toISOString().split('T')[0];
+    if (adminSelectedDate < today) {
+       triggerNotice('error', 'ไม่อนุญาตให้จองย้อนหลัง', 'ระบบล็อกไม่ให้สร้างคิวจองใหม่สำหรับวันที่ผ่านมาแล้วครับ');
+       return;
+    }
+
+    setAdminSelectedTables(prev => prev.includes(tableNum) ? prev.filter(t => t !== tableNum) : [...prev, tableNum]);
   };
 
-  const executeAdminLockTable = async () => {
+  const adminTotalPrice = useMemo(() => {
+    const ev = eventsMap[adminSelectedDate];
+    if (!ev || ev.event_type !== 'concert') return 0;
+
+    let isMemberValid = false;
+    if (adminForm.memberCode) {
+      isMemberValid = membersList.some(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
+    }
+
+    const ticketPrice = ev.extra_price_per_head || 0;
+
+    if (isMemberValid) {
+       return adminForm.guests * ticketPrice;
+    } else {
+       const basePrice = ev.price * adminSelectedTables.length;
+       const extraGuests = Math.max(0, adminForm.guests - (4 * adminSelectedTables.length));
+       const extraPrice = extraGuests * ticketPrice;
+       return basePrice + extraPrice;
+    }
+  }, [adminSelectedDate, eventsMap, adminSelectedTables.length, adminForm.guests, adminForm.memberCode, membersList]);
+
+  const isAdminSlipRequired = useMemo(() => {
+     const isConcert = eventsMap[adminSelectedDate]?.event_type === 'concert';
+     return isConcert && adminTotalPrice > 0;
+  }, [adminSelectedDate, eventsMap, adminTotalPrice]);
+
+  // 🟢 ฟังก์ชันสร้างข้อความแจ้งเตือน LINE
+  const generateLineMessage = useCallback(() => {
+    const ev = eventsMap[adminSelectedDate];
+    const isConcert = ev?.event_type === 'concert';
+    const isMemberValid = adminForm.memberCode && membersList.some(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
+    const ticketPrice = ev?.extra_price_per_head || 0;
+    const basePrice = (ev?.price || 0) * adminSelectedTables.length;
+    const extraGuests = Math.max(0, adminForm.guests - (4 * adminSelectedTables.length));
+    const extraPrice = extraGuests * ticketPrice;
+
+    let priceDetails = '';
+    if (isConcert) {
+      if (isMemberValid) {
+        priceDetails = `\n💵 ค่าตั๋ว VIP (${adminForm.guests} ท่าน): ${adminTotalPrice.toLocaleString()} บ.\n💰 ยอดโอน: ${adminTotalPrice.toLocaleString()} บาท`;
+      } else {
+        priceDetails = `\n💵 ค่าโต๊ะ (${adminSelectedTables.length}): ${basePrice.toLocaleString()} บ.`;
+        if (extraGuests > 0) {
+          priceDetails += `\n💵 ค่าเสริม (${extraGuests} คน): ${extraPrice.toLocaleString()} บ.`;
+        }
+        priceDetails += `\n💰 ยอดโอน: ${adminTotalPrice.toLocaleString()} บาท`;
+      }
+    } else {
+      priceDetails = `\n💰 ยอดโอน: 0 บาท (วันปกติ)`;
+    }
+
+    const vipText = adminForm.memberCode ? `\n🎟️ VIP Code: ${adminForm.memberCode}` : '';
+
+    return `📣 ลูกค้าจองโต๊ะใหม่ (Walk-in / เซลล์)\n📌 โต๊ะ: ${adminSelectedTables.join(', ')}\n👤 ชื่อ: ${adminForm.name}\n📞 โทร: ${adminForm.phone || '-'}\n👥 จำนวน: ${adminForm.guests} ท่าน\n📅 วันที่: ${adminSelectedDate}\n⏰ เวลา: ${adminForm.time} น.\n🧑‍💼 เซลล์: ${adminForm.saleName || '-'}${vipText}${priceDetails}`;
+  }, [adminSelectedDate, eventsMap, adminSelectedTables, adminForm, adminTotalPrice, membersList]);
+
+  // 🟢 STEP 1: ลอจิกฟอร์ม (ข้ามการบันทึกลง DB เพื่อให้เซลล์กด Back ได้)
+  const handleAdminFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminSelectedTables.length === 0) return;
+    if (!adminForm.name) { triggerNotice('error', 'ข้อมูลไม่ครบ', 'กรุณาระบุชื่อลูกค้าครับ'); return; }
+
+    let isMemberValid = false;
+    if (adminForm.memberCode) {
+      isMemberValid = membersList.some(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
+      if (!isMemberValid) {
+        triggerNotice('error', 'รหัส VIP ไม่ถูกต้อง', 'ไม่พบรหัส VIP นี้ในระบบ กรุณาตรวจสอบอีกครั้ง');
+        return;
+      }
+    }
+
+    if (isAdminSlipRequired) {
+      // ✅ แค่พับหน้าจอไป Step 2 (ยังไม่ล็อกโต๊ะ)
+      setAdminBookingStep('payment');
+    } else {
+      // ✅ ถ้าไม่ต้องใช้สลิป (จองฟรี) ให้ Insert ลง DB แล้วคอนเฟิร์มเลย
+      setIsLockProcessing(true);
+      try {
+        const randomCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
+        const newBookings = adminSelectedTables.map(table => ({
+          shop_id: shopSlug,
+          booking_code: adminSelectedTables.length > 1 ? `${randomCode}-${table}` : randomCode,
+          customer_name: adminForm.name,
+          phone: adminForm.phone || '-',
+          booking_date: adminSelectedDate,
+          booking_time: `${adminForm.time}:00`,
+          guests_count: adminForm.guests,
+          table_number: table,
+          status: 'confirmed',
+          slip_url: null,
+          sales_name: adminForm.saleName || null,
+          member_code: adminForm.memberCode || null,
+        }));
+
+        const { error } = await supabase.from('restaurant_bookings').insert(newBookings);
+        if (error) throw error;
+
+        try {
+          const lineMessage = generateLineMessage();
+          await fetch('/api/notify-line', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: lineMessage }) });
+        } catch (lineErr) { console.error(lineErr); }
+
+        closeAdminLockModal();
+        setAdminSelectedTables([]); 
+        triggerNotice('success', 'สำรองโต๊ะสำเร็จ', `ระบบได้ทำการจองโต๊ะ ${adminSelectedTables.join(', ')} เรียบร้อยแล้วครับ`);
+      } catch (err: any) { 
+        console.error(err); 
+        triggerNotice('error', 'ข้อผิดพลาด', err.message || 'ไม่สามารถบันทึกข้อมูลได้'); 
+      } finally { setIsLockProcessing(false); }
+    }
+  };
+
+  // 🟢 STEP 2: ลอจิกอัปโหลดสลิป (Insert ข้อมูลทั้งหมดลง DB เป็นสีเหลือง)
+  const handleAdminPaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLockProcessing(true);
+    try {
+      if (!adminSlipFile) throw new Error('กรุณาอัปโหลดหลักฐานการโอนเงิน (สลิป)');
+
+      const fileExt = adminSlipFile.name.split('.').pop();
+      const fileName = `admin-slip-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from('slips').upload(fileName, adminSlipFile, { cacheControl: '3600', upsert: false });
+      if (uploadError) throw new Error('อัปโหลดสลิปไม่สำเร็จ กรุณาลองใหม่');
+      const { data: urlData } = supabase.storage.from('slips').getPublicUrl(fileName);
+      const uploadedSlipUrl = urlData.publicUrl;
+
+      // 🟢 นำข้อมูลทั้งหมดแพ็คใส่ DB ตรงนี้ (ตั้งสถานะเป็น pending เพื่อรอแอดมินเช็คสลิป)
+      const randomCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
+      const newBookings = adminSelectedTables.map(table => ({
+        shop_id: shopSlug,
+        booking_code: adminSelectedTables.length > 1 ? `${randomCode}-${table}` : randomCode,
+        customer_name: adminForm.name,
+        phone: adminForm.phone || '-',
+        booking_date: adminSelectedDate,
+        booking_time: `${adminForm.time}:00`,
+        guests_count: adminForm.guests,
+        table_number: table,
+        status: 'pending', // <--- ระบบตั้งให้เป็นรอตรวจสอบ (สีเหลือง)
+        slip_url: uploadedSlipUrl,
+        sales_name: adminForm.saleName || null,
+        member_code: adminForm.memberCode || null,
+      }));
+
+      const { error: insertError } = await supabase.from('restaurant_bookings').insert(newBookings);
+      if (insertError) throw insertError;
+
+      try {
+        const lineMessage = generateLineMessage();
+        // 🟢 ส่ง imageUrl พ่วงไปด้วย เผื่อ API หลังบ้านรองรับการส่งรูปภาพตรงๆ
+        await fetch('/api/notify-line', { 
+           method: 'POST', 
+           headers: { 'Content-Type': 'application/json' }, 
+           body: JSON.stringify({ message: lineMessage, imageUrl: uploadedSlipUrl }) 
+        });
+      } catch (lineErr) { console.error(lineErr); }
+
+      closeAdminLockModal();
+      setAdminSelectedTables([]);
+      
+      // แจ้งเตือนแบบใหม่ให้ชัดเจน
+      triggerNotice('success', 'ส่งข้อมูลสำเร็จ', `ระบบส่งสลิปโต๊ะ ${adminSelectedTables.join(', ')} เรียบร้อยแล้ว โต๊ะจะแสดงสถานะสีเหลือง (รอตรวจสอบ) จนกว่าแอดมินจะกดยืนยันยอดครับ`);
+    } catch (err: any) {
+      triggerNotice('error', 'ข้อผิดพลาด', err.message || 'ไม่สามารถบันทึกสลิปได้');
+    } finally { setIsLockProcessing(false); }
+  };
+
+  const executeAdminUnlockTable = async () => {
     if (!tablePendingLock) return;
     setIsLockProcessing(true);
     try {
-      const res = await fetch('/api/admin/lock-table', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopId: shopSlug, tableNumber: tablePendingLock, bookingDate: adminSelectedDate, action: lockModalMode }) });
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) throw new Error('Server เกิดปัญหาสัญญาณขาดหาย');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Server returned error');
-      setIsLockConfirmModalOpen(false); setTablePendingLock(null);
-      triggerNotice('success', lockModalMode === 'lock' ? 'ล็อกพิกัดโต๊ะสำเร็จ' : 'คืนพื้นที่โต๊ะสำเร็จ', lockModalMode === 'lock' ? `ระบบทำการเปลี่ยนโต๊ะหมายเลข ${tablePendingLock} เป็นสถานะสตาฟฟ์แมนนวลบล็อกสิทธิ์ออนไลน์หน้าร้านเรียบร้อย` : `ปลดล็อกโต๊ะหมายเลข ${tablePendingLock} คืนกลับสู่สถานะว่างเพื่อให้ลูกค้าจากทางบ้านแย่งจองได้ตามปกติแล้ว`);
-    } catch (err: any) { console.error(err); triggerNotice('error', 'คำสั่งขัดข้อง', err.message || 'ระบบหลังบ้านพังกระจาย ส่งสัญญาไปตรวจสอบไฟล์จองไม่สำเร็จ'); } finally { setIsLockProcessing(false); }
+      const res = await fetch('/api/admin/lock-table', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopId: shopSlug, tableNumber: tablePendingLock, bookingDate: adminSelectedDate, action: 'unlock' }) });
+      if (!res.ok) throw new Error('Server returned error');
+      closeAdminLockModal();
+      triggerNotice('success', 'คืนพื้นที่โต๊ะสำเร็จ', `ปลดล็อกโต๊ะหมายเลข ${tablePendingLock} เรียบร้อยแล้ว`);
+    } catch (err: any) { triggerNotice('error', 'คำสั่งขัดข้อง', 'ระบบหลังบ้านพังกระจาย'); } finally { setIsLockProcessing(false); }
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]; setImageFile(file); setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleAdminSlipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]; setAdminSlipFile(file); setAdminSlipPreview(URL.createObjectURL(file));
     }
   };
 
@@ -315,6 +624,7 @@ export default function MonitorPage() {
         event_type: eventType,
         title: eventType === 'concert' ? eventTitle : eventType === 'closed' ? 'วันหยุดร้าน' : 'วันบริการปกติ',
         price: eventType === 'concert' ? eventPrice : 0,
+        extra_price_per_head: eventType === 'concert' ? eventExtraPrice : 0, 
         perks_note: eventType === 'concert' ? perksNote : eventType === 'closed' ? 'ปิดรับจองออนไลน์ วันหยุดทำการ' : 'จองฟรี ไม่มีค่าบริการ',
         image_url: eventType === 'concert' ? uploadedImageUrl : null,
       };
@@ -358,21 +668,21 @@ export default function MonitorPage() {
       if (!matchesZone) return false;
       const liveStatus = deriveStatus(b);
       if (liveStatus === 'past' && !showPast && !q) return false;
-      if (q) { return (b.customer_name?.toLowerCase().includes(q) || b.booking_code?.toLowerCase().includes(q) || b.phone?.toLowerCase().includes(q)); }
+      if (q) { return (b.customer_name?.toLowerCase().includes(q) || b.booking_code?.toLowerCase().includes(q) || b.phone?.toLowerCase().includes(q) || b.sales_name?.toLowerCase().includes(q)); }
       return true;
     });
   }, [bookings, query, zone, showPast]);
 
   const handleExportCSV = () => {
     if (filtered.length === 0) { triggerNotice('error', 'ไม่สามารถดาวน์โหลดได้', 'ไม่มีข้อมูลในหน้าฟีดให้ดาวน์โหลดในขณะนี้ครับ'); return; }
-    const headers = ['วันที่จอง', 'เวลานัดหมาย', 'รหัสใบจอง', 'ชื่อลูกค้า', 'เบอร์โทรศัพท์', 'รหัสโต๊ะ', 'จำนวนแขก', 'สถานะคิว', 'ค่าบัตรแพ็กเกจรวม'];
+    const headers = ['วันที่จอง', 'เวลานัดหมาย', 'รหัสใบจอง', 'ชื่อลูกค้า', 'เบอร์โทรศัพท์', 'เซลล์', 'รหัสโต๊ะ', 'จำนวนแขก', 'สถานะคิว', 'ค่าบัตรแพ็กเกจรวม'];
     const rows = filtered.map((b) => {
       let statusText = 'รอเช็คอิน';
       if (b.status === 'pending') statusText = 'รอชำระเงิน';
       else if (b.status === 'checked_in') statusText = 'มาแล้ว';
       else if (b.status === 'no_show') statusText = 'ไม่มา (No Show)';
       const tablePrice = eventsMap[b.booking_date]?.price || 0;
-      return [ b.booking_date, (b.booking_time || '').slice(0, 5), b.booking_code, `"${b.customer_name?.replace(/"/g, '""')}"`, `="${b.phone}"`, b.table_number, b.guests_count, statusText, `${tablePrice} บาท` ];
+      return [ b.booking_date, (b.booking_time || '').slice(0, 5), b.booking_code, `"${b.customer_name?.replace(/"/g, '""')}"`, `="${b.phone}"`, `"${b.sales_name || '-'}"`, b.table_number, b.guests_count, statusText, `${tablePrice} บาท` ];
     });
     const csvContent = ['\uFEFF' + headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -403,6 +713,7 @@ export default function MonitorPage() {
 
   if (!shopExists) return notFound();
   if (authLoading) return ( <div className="min-h-screen flex items-center justify-center font-sans" style={{ backgroundColor: THEME.bg }}> <div className="text-center space-y-3"> <Loader2 size={36} className="animate-spin mx-auto" style={{ color: THEME.pink }} /> <p className="text-sm font-medium" style={{ color: THEME.muted }}>กำลังตรวจสอบสิทธิ์การเข้าถึงระบบควบคุม...</p> </div> </div> );
+  
   if (!session) {
     return (
       <div className="min-h-screen w-full font-sans flex items-center justify-center p-4 relative" style={{ backgroundColor: THEME.bg, color: THEME.text }}>
@@ -435,33 +746,45 @@ export default function MonitorPage() {
       </div>
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-slate-800/60 pb-5">
+        <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between border-b border-slate-800/60 pb-5">
           <div>
             <div className="flex items-center gap-2">
               <span className="flex h-2.5 w-2.5 rounded-full animate-pulse" style={{ backgroundColor: THEME.pink, boxShadow: `0 0 12px ${THEME.pink}` }} />
               <span className="font-mono text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: THEME.pink }}>21st Live Reservation Controller</span>
             </div>
-            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white">{shopName}</h1>
+            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white flex items-center flex-wrap gap-3">
+              {shopName}
+              <span className="text-[10px] sm:text-xs font-mono px-3 py-1 rounded-full border bg-black/40 text-emerald-400 border-emerald-500/30">
+                ROLE: {role.toUpperCase()}
+              </span>
+            </h1>
           </div>
-          <div className="flex flex-wrap items-center gap-3 z-50">
-            <button type="button" onClick={() => { setIsEventModalOpen(true); setEventStatusMsg(null); }} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95 text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20"><Music size={14} />จัดการปฏิทินร้าน</button>
-            <div className="relative">
-              <button type="button" onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)} className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold border transition-all active:scale-95 ${isBookingOpen ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
-                <Radio size={14} className={isBookingOpen ? "animate-pulse text-emerald-400" : "text-red-400"} />
-                <div><p className="font-mono text-[9px] uppercase tracking-widest font-bold leading-none text-left opacity-70">SYSTEM STATUS</p><p className="text-xs font-bold mt-0.5">{isBookingOpen ? `ระบบเปิดปกติ • Sync: ${lastSync}` : 'ปิดระบบรับคิวออนไลน์'}</p></div>
-                <ChevronDown size={12} className="ml-1 opacity-70" />
-              </button>
-              <AnimatePresence>
-                {isStatusDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#16161E] border border-[#2D2235] p-1.5 shadow-2xl space-y-1 z-50">
-                    <button type="button" onClick={() => handleToggleBookingStatus(true)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-emerald-400 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> เปิดรับจองออนไลน์ปกติ</button>
-                    <button type="button" onClick={() => handleToggleBookingStatus(false)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-red-400 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-red-400" /> ปิดระบบรับคิวล่วงหน้าชั่วคราว</button>
-                  </div>
-                )}
-              </AnimatePresence>
-            </div>
-            <button onClick={() => setIsReportModalOpen(true)} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95 text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20"><AlertTriangle size={14} />รายงานปัญหา</button>
-            <button type="button" onClick={handleLogoutClick} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-all active:scale-95 text-gray-400 border-slate-800 bg-black/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"><LogOut size={14} />ออกจากระบบ</button>
+          
+          <div className="flex flex-wrap items-center justify-start xl:justify-end gap-2 z-50">
+            {role === 'owner' && (
+              <>
+                <button type="button" onClick={() => { setIsSalesModalOpen(true); loadSales(); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-[#00F5D4] bg-[#00F5D4]/10 border-[#00F5D4]/20 hover:bg-[#00F5D4]/20"><Briefcase size={14} className="hidden sm:block" />จัดการเซลล์</button>
+                <button type="button" onClick={() => { setIsMemberModalOpen(true); loadMembers(); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20"><Crown size={14} className="hidden sm:block" />จัดการ VIP</button>
+                <button type="button" onClick={() => { setIsEventModalOpen(true); setEventStatusMsg(null); }} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-pink-400 bg-pink-500/10 border-pink-500/20 hover:bg-pink-500/20"><Music size={14} className="hidden sm:block" />ปฏิทินร้าน</button>
+                <div className="relative">
+                  <button type="button" onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-extrabold border transition-all active:scale-95 ${isBookingOpen ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
+                    <Radio size={14} className={isBookingOpen ? "animate-pulse text-emerald-400" : "text-red-400"} />
+                    <div className="hidden sm:block"><p className="font-mono text-[9px] uppercase tracking-widest font-bold leading-none text-left opacity-70">SYSTEM</p><p className="text-xs font-bold mt-0.5">{isBookingOpen ? `เปิดปกติ` : 'ปิดรับคิว'}</p></div>
+                    <ChevronDown size={12} className="ml-1 opacity-70" />
+                  </button>
+                  <AnimatePresence>
+                    {isStatusDropdownOpen && (
+                      <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#16161E] border border-[#2D2235] p-1.5 shadow-2xl space-y-1 z-50">
+                        <button type="button" onClick={() => handleToggleBookingStatus(true)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-emerald-400 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> เปิดรับจองออนไลน์ปกติ</button>
+                        <button type="button" onClick={() => handleToggleBookingStatus(false)} className="w-full text-left text-xs p-2.5 hover:bg-white/5 rounded-lg flex items-center gap-2 text-red-400 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-red-400" /> ปิดระบบรับคิวล่วงหน้าชั่วคราว</button>
+                      </div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </>
+            )}
+            <button onClick={() => setIsReportModalOpen(true)} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20"><AlertTriangle size={14} className="hidden sm:block" />รายงานปัญหา</button>
+            <button type="button" onClick={handleLogoutClick} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all active:scale-95 text-gray-400 border-slate-800 bg-black/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"><LogOut size={14} />ออกจากระบบ</button>
           </div>
         </header>
 
@@ -475,7 +798,7 @@ export default function MonitorPage() {
         <div className="mt-6 flex flex-col gap-3 lg:flex-row justify-between items-stretch lg:items-center">
           <div className="flex flex-1 items-center gap-2.5 rounded-xl px-4 h-11 bg-black/20 border" style={{ borderColor: THEME.border }}>
             <Search size={18} style={{ color: THEME.muted }} />
-            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า / รหัสจอง / เบอร์โทร..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600 text-white" />
+            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า / รหัสจอง / เซลล์ / เบอร์โทร..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600 text-white" />
           </div>
           <div className="flex gap-3 flex-wrap items-center">
             <div className="bg-black/40 border p-1 rounded-xl flex items-center gap-1 h-11" style={{ borderColor: THEME.border }}>
@@ -483,7 +806,11 @@ export default function MonitorPage() {
               <button type="button" onClick={() => setViewMode('floorplan')} className={`flex items-center gap-1.5 px-3 h-full rounded-lg text-xs font-bold transition-all ${viewMode === 'floorplan' ? 'bg-[#FF1F88] text-white shadow-md' : 'text-[#9E9EAF] hover:text-white'}`}><Map size={13} /> ผังร้าน & บล็อกโต๊ะ</button>
             </div>
             <button type="button" onClick={() => { setShowPast(!showPast); }} className="flex items-center gap-2 rounded-xl px-4 h-11 text-sm font-medium border transition-all active:scale-95" style={{ backgroundColor: showPast ? `${THEME.purple}1A` : 'transparent', borderColor: showPast ? THEME.purple : THEME.border, color: showPast ? THEME.purple : THEME.text }}><History size={16} /><span>ประวัติอดีต</span><span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/50">{showPast ? 'ON' : 'OFF'}</span></button>
-            <button type="button" onClick={handleExportCSV} className="flex items-center gap-2 rounded-xl px-4 h-11 text-sm font-bold border transition-all active:scale-95 bg-transparent hover:bg-white/5" style={{ borderColor: THEME.border, color: THEME.mint }}><Download size={16} /><span>Export CSV Report</span></button>
+            
+            {role === 'owner' && (
+              <button type="button" onClick={handleExportCSV} className="flex items-center gap-2 rounded-xl px-4 h-11 text-sm font-bold border transition-all active:scale-95 bg-transparent hover:bg-white/5" style={{ borderColor: THEME.border, color: THEME.mint }}><Download size={16} /><span>Export CSV Report</span></button>
+            )}
+
             <div className="relative flex items-center rounded-xl bg-black/20 border h-11" style={{ borderColor: THEME.border }}>
               <Filter size={16} className="pointer-events-none absolute left-4" style={{ color: THEME.muted }} />
               <select value={zone} onChange={(e) => setZone(e.target.value as ZoneId)} className="h-full cursor-pointer appearance-none bg-transparent pl-11 pr-10 text-sm font-medium outline-none text-white rounded-xl">
@@ -540,7 +867,8 @@ export default function MonitorPage() {
                             booking={b} 
                             eventPrice={eventsMap[b.booking_date]?.price || 0}
                             onUpdateStatus={handleUpdateStatus}
-                            onViewSlip={(bookingData) => setSelectedBookingForSlip(bookingData)} 
+                            onViewSlip={(bookingData) => setSelectedBookingForSlip(bookingData)}
+                            role={role}
                           />
                         ))}
                       </div>
@@ -553,8 +881,10 @@ export default function MonitorPage() {
             <div className="space-y-4 animate-fade-in">
               <div className="p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-amber-500/5 border-amber-500/20 text-xs text-[#E5B842]">
                 <div className="leading-relaxed">
-                  <p className="font-bold flex items-center gap-1.5 mb-1">🛡️ แผงควบคุมล็อกตำแหน่งโต๊ะอาหารหลังบ้าน</p>
-                  <p className="text-slate-400">คุณพ่อสามารถเลือกวันที่ที่ต้องการตรวจสอบ จากนั้นคลิกที่ไอคอนโต๊ะบนผังร้านเพื่อสั่งบล็อกคิว (สำหรับแขก Walk-in หรือโทรจอง) ไฟแดงจะเด้งบล็อกลูกค้าทางบ้านเรียลไทม์ทันทีครับ</p>
+                  <p className="font-bold flex items-center gap-1.5 mb-1">🛡️ แผงควบคุมตำแหน่งโต๊ะอาหารหลังบ้าน</p>
+                  <p className="text-slate-400">
+                    คลิกที่ไอคอนโต๊ะว่างบนผังร้านเพื่อสั่งจอง (สำหรับเซลล์ หรือ Walk-in) โต๊ะที่จิ้มจะกลายเป็นสีแดงล็อกไว้ให้ทันทีครับ
+                  </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="font-bold text-white text-xs sm:text-sm">เลือกวันที่ตรวจสอบ:</span>
@@ -570,15 +900,29 @@ export default function MonitorPage() {
                 </div>
               </div>
 
-              <div className="w-full rounded-3xl bg-[#16161E] border border-[#2D2235] p-6 flex items-center justify-center min-h-[450px] overflow-x-auto shadow-inner">
+              <div className="w-full rounded-3xl bg-[#16161E] border border-[#2D2235] p-6 flex flex-col items-center justify-center min-h-[450px] overflow-x-auto shadow-inner relative">
                 <FloorPlan 
-                  selectedTable={selectedTable}
-                  onTableClick={(tableNum: string) => {
-                    setSelectedTable(tableNum);
-                    handleAdminLockTableClick(tableNum);
-                  }}
+                  selectedTables={adminSelectedTables} 
+                  onTableClick={handleAdminLockTableClick}
                   dayTables={adminDayTablesMap}
                 />
+                
+                <AnimatePresence>
+                  {adminSelectedTables.length > 0 && (
+                    <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} exit={{opacity: 0, y: 10}} className="mt-6 p-4 w-full max-w-md rounded-2xl border bg-black/60 backdrop-blur-md flex items-center justify-between border-emerald-500/30 shadow-lg">
+                      <div>
+                        <p className="text-xs text-gray-400">โต๊ะที่เลือกเตรียมจอง</p>
+                        <p className="text-emerald-400 font-bold text-lg">{adminSelectedTables.join(', ')}</p>
+                      </div>
+                      <button
+                        onClick={() => { setLockModalMode('lock'); setIsLockConfirmModalOpen(true); }}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-black px-6 py-2.5 rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                      >
+                        ดำเนินการจอง ({adminSelectedTables.length})
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           )}
@@ -621,7 +965,7 @@ export default function MonitorPage() {
                   ) : (
                     <div className="w-full h-32 rounded-xl bg-black/40 border border-dashed border-slate-700 flex flex-col items-center justify-center text-slate-500">
                       <ImageIcon size={24} className="mb-2 opacity-50"/>
-                      <span className="text-xs font-medium">ไม่พบรูปภาพสลิปแนบมาในระบบ</span>
+                      <span className="text-xs font-medium text-center">ไม่พบรูปภาพสลิปแนบมาในระบบ<br/>(อาจเป็นการจองฟรี หรือใช้โค้ด VIP)</span>
                     </div>
                   )}
                 </div>
@@ -636,7 +980,17 @@ export default function MonitorPage() {
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">ชื่อลูกค้า:</span> <span className="font-bold text-white text-right">{selectedBookingForSlip.customer_name}</span></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เบอร์ติดต่อ:</span> <span className="font-mono text-white text-right">{selectedBookingForSlip.phone}</span></div>
                   
-                  {/* 🟢 อัปเดตข้อมูลตรงนี้ เพิ่มเวลาที่จอง และ Timestamp */}
+                  {selectedBookingForSlip.sales_name && (
+                    <div className="flex justify-between items-center bg-[#00F5D4]/10 p-1.5 -mx-1.5 rounded text-[#00F5D4]">
+                      <span className="text-xs font-bold flex items-center gap-1"><Briefcase size={14}/> ผู้ดูแล (เซลล์):</span> <span className="font-bold">{selectedBookingForSlip.sales_name}</span>
+                    </div>
+                  )}
+                  {selectedBookingForSlip.member_code && (
+                    <div className="flex justify-between items-center bg-amber-500/10 p-1.5 -mx-1.5 rounded text-amber-400">
+                      <span className="text-xs font-bold flex items-center gap-1"><Ticket size={14}/> รหัส VIP ที่ใช้:</span> <span className="font-mono">{selectedBookingForSlip.member_code}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">วันที่เข้ารับบริการ:</span> <span className="font-mono text-white">{selectedBookingForSlip.booking_date}</span></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">เวลานัดหมาย:</span> <span className="font-mono text-white">{(selectedBookingForSlip.booking_time || '').slice(0, 5)} น.</span></div>
                   <div className="flex justify-between items-center"><span className="text-gray-400 text-xs">จำนวนแขก:</span> <span className="font-mono text-white">{selectedBookingForSlip.guests_count} ท่าน</span></div>
@@ -650,7 +1004,7 @@ export default function MonitorPage() {
                   )}
 
                   <div className="border-t border-slate-800/80 pt-3 mt-1 flex justify-between items-center bg-amber-500/5 -mx-4 px-4 pb-1">
-                    <span className="text-amber-500/80 text-xs font-bold">ยอดที่ต้องชำระ (อ้างอิงรายโต๊ะ):</span> 
+                    <span className="text-amber-500/80 text-xs font-bold">ราคาเหมา (ต่อ 1 โต๊ะ):</span> 
                     <span className="font-black text-amber-400 text-base">
                       {((eventsMap[selectedBookingForSlip.booking_date]?.price || 0)).toLocaleString()} ฿
                     </span>
@@ -660,32 +1014,38 @@ export default function MonitorPage() {
 
               <div className="p-5 border-t border-slate-800/80 bg-black/40 shrink-0 grid grid-cols-2 gap-3">
                 {selectedBookingForSlip.status === 'pending' ? (
-                  <>
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        if(window.confirm('คุณต้องการปฏิเสธคิวและล้างโต๊ะนี้ให้ว่างใช่หรือไม่?')) {
-                          handleUpdateStatus(selectedBookingForSlip.id, 'no_show');
+                  role === 'owner' ? (
+                    <>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          if(window.confirm('คุณต้องการปฏิเสธคิวและล้างโต๊ะนี้ให้ว่างใช่หรือไม่?')) {
+                            handleUpdateStatus(selectedBookingForSlip.id, 'no_show');
+                            setSelectedBookingForSlip(null);
+                          }
+                        }}
+                        className="py-3 rounded-xl text-xs font-bold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors"
+                      >
+                        ปฏิเสธคิว (ลบทิ้ง)
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          handleUpdateStatus(selectedBookingForSlip.id, 'confirmed');
                           setSelectedBookingForSlip(null);
-                        }
-                      }}
-                      className="py-3 rounded-xl text-xs font-bold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors"
-                    >
-                      ปฏิเสธคิว (ลบทิ้ง)
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        handleUpdateStatus(selectedBookingForSlip.id, 'confirmed');
-                        setSelectedBookingForSlip(null);
-                      }}
-                      className="py-3 rounded-xl text-xs font-bold text-black flex items-center justify-center gap-1.5 transition-transform active:scale-95 shadow-[0_0_15px_rgba(229,184,66,0.2)]"
-                      style={{ backgroundColor: THEME.gold }}
-                    >
-                      <Check size={14} className="stroke-[3]"/>
-                      ยืนยันรับยอดเงิน
-                    </button>
-                  </>
+                        }}
+                        className="py-3 rounded-xl text-xs font-bold text-black flex items-center justify-center gap-1.5 transition-transform active:scale-95 shadow-[0_0_15px_rgba(229,184,66,0.2)]"
+                        style={{ backgroundColor: THEME.gold }}
+                      >
+                        <Check size={14} className="stroke-[3]"/>
+                        ยืนยันรับยอดเงิน
+                      </button>
+                    </>
+                  ) : (
+                    <div className="col-span-2 py-3 rounded-xl text-xs font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 text-center">
+                      รอแอดมินตรวจสอบสลิปและยืนยันยอด
+                    </div>
+                  )
                 ) : (
                   <button 
                     type="button" 
@@ -703,39 +1063,285 @@ export default function MonitorPage() {
 
       <AnimatePresence>
         {isLockConfirmModalOpen && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[999]">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[999] overflow-y-auto custom-scrollbar">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-md rounded-2xl border p-6 space-y-5 shadow-[0_0_50px_rgba(0,0,0,0.8)]" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
+              className="w-full max-w-md rounded-2xl border p-6 space-y-5 shadow-[0_0_50px_rgba(0,0,0,0.8)] my-8 bg-[#16161E] border-[#2D2235]" 
             >
-              <div className="flex items-center gap-3">
-                <div 
-                  className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-colors"
-                  style={{ backgroundColor: lockModalMode === 'lock' ? 'rgba(229, 184, 66, 0.1)' : 'rgba(0, 245, 212, 0.1)', borderColor: lockModalMode === 'lock' ? 'rgba(229, 184, 66, 0.2)' : 'rgba(0, 245, 212, 0.2)', color: lockModalMode === 'lock' ? THEME.gold : THEME.mint }}
-                >
-                  <Lock size={18} />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-white">{lockModalMode === 'lock' ? 'ยืนยันคำสั่งล็อกตำแหน่งโต๊ะอาหาร' : 'ยืนยันคำสั่ง "ปลดล็อก" โต๊ะอาหาร'}</h3>
-                  <p className="text-[11px] text-[#9E9EAF] font-mono mt-0.5">{lockModalMode === 'lock' ? 'ADMIN MANUAL OVERRIDE PROTOCOL' : 'ADMIN DISMANTLE OVERRIDE PROTOCOL'}</p>
-                </div>
-              </div>
-              <div className="p-4 rounded-xl bg-black/40 border border-slate-800 text-xs sm:text-sm space-y-2 leading-relaxed">
-                <p className="text-gray-300">คุณต้องการทำการ {lockModalMode === 'lock' ? <span className="text-pink-500 font-extrabold">ล็อกโต๊ะหมายเลข {tablePendingLock}</span> : <span className="text-emerald-400 font-extrabold">ปลดล็อกโต๊ะหมายเลข {tablePendingLock}</span>} ใช่หรือไม่?</p>
-                <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px] text-slate-400">
-                  <div className="flex items-center gap-1"><CalendarDays size={12} className="text-[#E5B842]" /> วันที่: {adminSelectedDate}</div>
-                  <div className="flex items-center gap-1"><Users size={12} className="text-[#00F5D4]" /> โดย: สตาฟฟ์หลังบ้าน</div>
-                </div>
-              </div>
-              <div className="p-3 border rounded-xl text-[11px] flex items-start gap-2 leading-relaxed" style={{ backgroundColor: lockModalMode === 'lock' ? 'rgba(239,68,68,0.05)' : 'rgba(0,245,212,0.05)', borderColor: lockModalMode === 'lock' ? 'rgba(239,68,68,0.1)' : 'rgba(0,245,212,0.1)', color: lockModalMode === 'lock' ? '#F87171' : THEME.mint }}>
-                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                <span>{lockModalMode === 'lock' ? 'เมื่อกดยืนยันแล้ว ตำแหน่งโต๊ะนี้บนหน้าจอจองของลูกค้าออนไลน์ทุกคนจะเปลี่ยนเป็นสีแดง (ไม่ว่าง) ทันทีในรูปแบบเรียลไทม์ครับ' : 'เมื่อกดยืนยันแล้ว ระบบจะทำการล้างสถานะบล็อกออก โต๊ะนี้จะกลับมาเปิดเป็นสีเขียว (ว่าง) เพื่อให้ลูกค้าออนไลน์จากทางบ้านแย่งกดจองเข้ามาได้ตามปกติทันทีครับ'}</span>
-              </div>
-              <div className="flex items-center gap-3 pt-1 font-bold text-xs">
-                <button type="button" disabled={isLockProcessing} onClick={() => { setIsLockConfirmModalOpen(false); setTablePendingLock(null); }} className="flex-1 h-10 rounded-xl border border-slate-700 hover:bg-white/5 text-white transition-colors active:scale-95 disabled:opacity-40">ยกเลิก</button>
-                <button type="button" disabled={isLockProcessing} onClick={executeAdminLockTable} className="flex-1 h-10 rounded-xl text-black font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40" style={{ backgroundColor: lockModalMode === 'lock' ? THEME.gold : THEME.mint, boxShadow: lockModalMode === 'lock' ? '0 4px 15px rgba(229, 184, 66, 0.2)' : '0 4px 15px rgba(0, 245, 212, 0.2)' }}>{isLockProcessing ? <Loader2 size={14} className="animate-spin" /> : <><Check size={14} />{lockModalMode === 'lock' ? 'ยืนยันล็อกโต๊ะ' : 'ยืนยันปลดล็อกโต๊ะ'}</>}</button>
-              </div>
+              {lockModalMode === 'lock' ? (
+                <>
+                  {/* 🟢 STEP 1: หน้าฟอร์มกรอกข้อมูล */}
+                  {adminBookingStep === 'form' ? (
+                    <form onSubmit={handleAdminFormSubmit} className="space-y-4 animate-fade-in">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                          <User size={20}/>
+                        </div>
+                        <div>
+                          <h3 className="text-base font-extrabold text-white">สำรองโต๊ะ (Walk-in / Sale)</h3>
+                          <p className="text-[11px] text-[#9E9EAF]">กรอกข้อมูลเพื่อจองโต๊ะและบล็อกผังให้ลูกค้า</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 bg-black/40 p-4 rounded-xl border border-slate-800">
+                        <div>
+                          <label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อลูกค้า / นามแฝง</label>
+                          <input type="text" required value={adminForm.name} onChange={e => setAdminForm({...adminForm, name: e.target.value})} className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-white outline-none focus:border-emerald-500 text-sm" placeholder="เช่น ลูกค้า Walk-in / หรือชื่อลูกค้า" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold mb-1 text-gray-300">เบอร์โทรศัพท์ติดต่อ</label>
+                          <input type="tel" required value={adminForm.phone} onChange={e => setAdminForm({...adminForm, phone: e.target.value})} className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-white outline-none focus:border-emerald-500 text-sm" placeholder="08X-XXX-XXXX" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold mb-1 text-gray-300">เวลาเข้าโต๊ะ</label>
+                            <select value={adminForm.time} onChange={e => setAdminForm({...adminForm, time: e.target.value})} className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-white outline-none focus:border-emerald-500 text-sm">
+                              <option value="19:00" style={{backgroundColor: '#16161E'}}>19:00 น.</option>
+                              <option value="20:00" style={{backgroundColor: '#16161E'}}>20:00 น.</option>
+                              <option value="21:00" style={{backgroundColor: '#16161E'}}>21:00 น.</option>
+                              <option value="22:00" style={{backgroundColor: '#16161E'}}>22:00 น.</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold mb-1 text-gray-300">จำนวนคน</label>
+                            <input type="number" min="1" value={adminForm.guests} onChange={e => setAdminForm({...adminForm, guests: parseInt(e.target.value) || 1})} className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-white outline-none focus:border-emerald-500 text-sm text-center" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 bg-black/40 p-4 rounded-xl border border-slate-800">
+                        <div className="grid grid-cols-1 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold mb-1 text-[#00F5D4] flex items-center gap-1"><Briefcase size={13}/> เซลล์ผู้รับผิดชอบ (ถ้ามี)</label>
+                            <input 
+                              list="sales-list" 
+                              placeholder="พิมพ์หรือเลือกชื่อเซลล์" 
+                              value={adminForm.saleName} 
+                              onChange={(e) => setAdminForm({...adminForm, saleName: e.target.value})}
+                              className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-white outline-none focus:border-[#00F5D4] text-sm"
+                            />
+                            <datalist id="sales-list">
+                              {salesList.map(s => <option key={s.id} value={s.sale_name} />)}
+                            </datalist>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs font-semibold mb-1 text-amber-400 flex items-center gap-1"><Ticket size={13}/> รหัสสมาชิก VIP (ถ้ามี)</label>
+                            <input 
+                              type="text" 
+                              placeholder="กรอกโค้ดเพื่อรับสิทธิ์จองฟรี/ส่วนลด" 
+                              value={adminForm.memberCode} 
+                              onChange={(e) => setAdminForm({...adminForm, memberCode: e.target.value})}
+                              className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-amber-400 outline-none focus:border-amber-500 font-mono text-sm uppercase placeholder:text-slate-600"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex flex-col gap-1 text-sm">
+                         <span className="text-emerald-500 text-xs font-bold">ตำแหน่งที่โต๊ะที่สั่งบล็อก:</span>
+                         <span className="text-emerald-400 font-mono font-bold tracking-wide">{adminSelectedTables.join(', ')}</span>
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        <button type="button" onClick={closeAdminLockModal} className="flex-1 h-10 rounded-xl border border-slate-700 hover:bg-white/5 text-white text-xs font-bold transition-colors">ยกเลิก</button>
+                        <button type="submit" disabled={isLockProcessing} className="flex-1 h-10 rounded-xl bg-emerald-500 text-black font-extrabold text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-400 transition-colors disabled:opacity-50 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                          {isLockProcessing ? <Loader2 size={16} className="animate-spin" /> : null} 
+                          {isAdminSlipRequired ? 'ดำเนินการต่อ (ชำระเงิน) ➔' : 'บันทึกคิวจองทันที'}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    /* 🟢 STEP 2: หน้าชำระเงินและแนบสลิป */
+                    <form onSubmit={handleAdminPaymentSubmit} className="space-y-4 animate-fade-in">
+                      <div className="flex items-center gap-3 mb-2">
+                        <button type="button" onClick={() => setAdminBookingStep('form')} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors border border-slate-800">
+                           <ChevronLeft size={18} />
+                        </button>
+                        <div>
+                          <h3 className="text-base font-extrabold text-white">ชำระเงินยืนยันโต๊ะ</h3>
+                          <p className="text-[11px] text-amber-400 animate-pulse">⏳ กรุณาโอนเงินและแนบสลิปเพื่อล็อกโต๊ะ</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-black/40 border border-slate-800 p-4 rounded-xl space-y-2.5 text-sm">
+                         <div className="flex justify-between text-gray-300 text-xs"><span>โต๊ะที่จอง:</span><span className="font-bold text-white">{adminSelectedTables.join(', ')}</span></div>
+                         <div className="flex justify-between text-gray-300 text-xs"><span>ชื่อลูกค้า:</span><span className="font-bold text-white">{adminForm.name}</span></div>
+                         <div className="flex justify-between text-gray-300 text-xs"><span>จำนวนคน:</span><span className="font-bold text-white">{adminForm.guests} ท่าน</span></div>
+                         
+                         {/* 🟢 แจ้งเตือนสิทธิ์เมมเบอร์ในสรุปยอด */}
+                         {membersList.some(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase()) && (
+                           <div className="flex justify-between text-amber-400 text-xs"><span>ใช้สิทธิ์เมมเบอร์:</span><span className="font-bold">ชำระเฉพาะค่าตั๋ว {adminForm.guests} ท่าน</span></div>
+                         )}
+
+                         <div className="flex justify-between items-center text-pink-400 font-bold border-t border-slate-800 pt-3 mt-1">
+                           <span className="text-xs">ยอดรวมที่ต้องชำระ:</span>
+                           <span className="text-xl tracking-tight">{adminTotalPrice.toLocaleString()} ฿</span>
+                         </div>
+                      </div>
+
+                      {/* 🟢 ส่วนแสดง Dynamic PromptPay QR Code */}
+                      <div className="bg-[#003D6A] p-4 rounded-xl flex flex-col items-center justify-center text-white border border-[#002D4E] shadow-inner">
+                        <div className="bg-white p-2.5 rounded-xl mb-3 shadow-lg h-36 w-36 flex items-center justify-center overflow-hidden">
+                          <img 
+                            src={`https://promptpay.io/${PROMPTPAY_NUMBER}/${adminTotalPrice}.png`} 
+                            alt="PromptPay QR" 
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <p className="font-bold text-sm tracking-wide">Thai QR Payment</p>
+                        <p className="text-[10px] text-blue-200 mt-0.5">เบอร์พร้อมเพย์: {PROMPTPAY_NUMBER}</p>
+                      </div>
+
+                      <div className="bg-black/40 p-4 rounded-xl border border-slate-800">
+                        <label className="block text-xs font-semibold mb-2 text-white">แนบหลักฐานการโอนเงิน (สลิป)</label>
+                        <div className="relative h-28 w-full border border-dashed rounded-xl flex flex-col items-center justify-center bg-black/20 cursor-pointer overflow-hidden group transition-all" style={{ borderColor: adminSlipFile ? THEME.mint : '#EF4444' }}>
+                          <input type="file" accept="image/*" required onChange={handleAdminSlipChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                          {adminSlipPreview ? (
+                            <>
+                              <img src={adminSlipPreview} alt="Preview" className="w-full h-full object-contain" />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center z-0"><ImageIcon size={20} className="text-white mb-1" /><p className="text-[10px] font-bold text-white">เปลี่ยนรูป</p></div>
+                            </>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-slate-400 group-hover:text-white transition-colors">
+                              <ImageIcon size={24} className="mb-2" />
+                              <p className="text-[10px] font-bold">คลิกอัปโหลดสลิปที่นี่</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        {/* 🟢 ปุ่มนี้ใช้ยกเลิกการทำรายการทั้งหมด เพราะเราข้ามการล็อกโต๊ะใน Step 1 มาแล้ว */}
+                        <button type="button" onClick={closeAdminLockModal} className="w-1/3 h-11 rounded-xl border border-slate-700 hover:bg-white/5 text-white text-xs font-bold transition-colors">ยกเลิก</button>
+                        <button type="submit" disabled={isLockProcessing || !adminSlipFile} className="flex-1 h-11 rounded-xl bg-emerald-500 text-black font-extrabold text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-400 transition-colors disabled:opacity-50 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                          {isLockProcessing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} className="stroke-[3]" />} ส่งสลิปเพื่อรอตรวจสอบ
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-colors bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+                      <Unlock size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-white">ยืนยันคำสั่ง "ปลดล็อก" โต๊ะอาหาร</h3>
+                      <p className="text-[11px] text-[#9E9EAF] font-mono mt-0.5">ADMIN DISMANTLE OVERRIDE PROTOCOL</p>
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-black/40 border border-slate-800 text-xs sm:text-sm space-y-2 leading-relaxed">
+                    <p className="text-gray-300">คุณต้องการทำการ <span className="text-emerald-400 font-extrabold">ปลดล็อกโต๊ะหมายเลข {tablePendingLock}</span> ใช่หรือไม่?</p>
+                  </div>
+                  <div className="flex items-center gap-3 pt-1 font-bold text-xs">
+                    <button type="button" disabled={isLockProcessing} onClick={closeAdminLockModal} className="flex-1 h-10 rounded-xl border border-slate-700 hover:bg-white/5 text-white transition-colors active:scale-95 disabled:opacity-40">ยกเลิก</button>
+                    <button type="button" disabled={isLockProcessing} onClick={executeAdminUnlockTable} className="flex-1 h-10 rounded-xl text-black font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40 bg-emerald-500 hover:bg-emerald-400 shadow-[0_4px_15px_rgba(0,245,212,0.2)]">{isLockProcessing ? <Loader2 size={14} className="animate-spin" /> : <><Check size={14} />ยืนยันปลดล็อกโต๊ะ</>}</button>
+                  </div>
+                </>
+              )}
             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isMemberModalOpen && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[80] transition-all overflow-y-auto">
+            <div className="w-full max-w-2xl rounded-2xl p-6 border my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
+              <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: THEME.border }}>
+                <div className="flex items-center gap-2"><Crown style={{ color: THEME.gold }} size={20} /><h2 className="text-xl font-bold tracking-tight text-white">จัดการระบบสมาชิก VIP</h2></div>
+                <button onClick={() => setIsMemberModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <form onSubmit={handleAddMember} className="space-y-4 p-4 bg-black/30 rounded-2xl border" style={{ borderColor: THEME.border }}>
+                  <h3 className="text-sm font-bold text-white mb-2">เพิ่มรหัส VIP ใหม่</h3>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อสมาชิก / กลุ่ม VIP</label>
+                    <input type="text" required placeholder="เช่น กลุ่มคุณแพทตี้" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-10 text-white outline-none focus:border-amber-500 text-sm" style={{ borderColor: THEME.border }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 text-gray-300">รหัสผ่านสำหรับจองฟรี (Code)</label>
+                    <input type="text" required placeholder="เช่น PATTYVIP99" value={newMemberCode} onChange={(e) => setNewMemberCode(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-10 text-white outline-none focus:border-amber-500 text-sm font-mono" style={{ borderColor: THEME.border }} />
+                  </div>
+                  <button type="submit" disabled={isMemberLoading || !newMemberName || !newMemberCode} className="w-full h-10 rounded-xl font-bold text-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2 text-sm" style={{ backgroundColor: THEME.gold }}>
+                    {isMemberLoading ? <Loader2 size={16} className="animate-spin" /> : <><Plus size={16} /> บันทึกรหัส VIP</>}
+                  </button>
+                </form>
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-white px-1">รายชื่อ VIP ในระบบ ({membersList.length})</h3>
+                  <div className="h-[200px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    {membersList.length > 0 ? membersList.map((m) => (
+                      <div key={m.id} className="p-3 bg-black/40 border rounded-xl flex items-center justify-between group" style={{ borderColor: THEME.border }}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{m.member_name}</p>
+                          <p className="text-xs font-mono text-amber-400 truncate">Code: {m.member_code}</p>
+                        </div>
+                        <button onClick={() => handleDeleteMember(m.id)} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="ลบรหัสนี้">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )) : (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
+                        <Crown size={24} className="opacity-20" />
+                        <p className="text-xs">ยังไม่มีรหัส VIP ในระบบ</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isSalesModalOpen && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[80] transition-all overflow-y-auto">
+            <div className="w-full max-w-2xl rounded-2xl p-6 border my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
+              <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: THEME.border }}>
+                <div className="flex items-center gap-2"><Briefcase className="text-[#00F5D4]" size={20} /><h2 className="text-xl font-bold tracking-tight text-white">จัดการรายชื่อเซลล์หน้าร้าน</h2></div>
+                <button onClick={() => setIsSalesModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <form onSubmit={handleAddSale} className="space-y-4 p-4 bg-black/30 rounded-2xl border" style={{ borderColor: THEME.border }}>
+                  <h3 className="text-sm font-bold text-white mb-2">เพิ่มเซลล์ใหม่</h3>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อเซลล์ที่ใช้ทำงาน</label>
+                    <input type="text" required placeholder="เช่น เซลล์น้องมายด์" value={newSaleName} onChange={(e) => setNewSaleName(e.target.value)} className="w-full bg-black/20 border border-slate-700 rounded-xl px-4 h-10 text-white outline-none focus:border-[#00F5D4] text-sm" />
+                  </div>
+                  <button type="submit" disabled={isSalesLoading || !newSaleName} className="w-full h-10 rounded-xl font-bold text-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2 text-sm bg-[#00F5D4] hover:bg-[#00F5D4]/80">
+                    {isSalesLoading ? <Loader2 size={16} className="animate-spin" /> : <><Plus size={16} /> บันทึกรายชื่อเซลล์</>}
+                  </button>
+                </form>
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-white px-1">รายชื่อเซลล์ปัจจุบัน ({salesList.length})</h3>
+                  <div className="h-[150px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    {salesList.length > 0 ? salesList.map((s) => (
+                      <div key={s.id} className="p-3 bg-black/40 border rounded-xl flex items-center justify-between group" style={{ borderColor: THEME.border }}>
+                        <div className="min-w-0 flex items-center gap-2">
+                          <User size={14} className="text-slate-400"/>
+                          <p className="text-sm font-bold text-white truncate">{s.sale_name}</p>
+                        </div>
+                        <button onClick={() => handleDeleteSale(s.id)} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="ลบเซลล์นี้">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )) : (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
+                        <Briefcase size={24} className="opacity-20" />
+                        <p className="text-xs">ยังไม่มีรายชื่อเซลล์</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </AnimatePresence>
@@ -755,7 +1361,7 @@ export default function MonitorPage() {
       </AnimatePresence>
 
       {isEventModalOpen && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 transition-all overflow-y-auto">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[80] transition-all overflow-y-auto">
           <div className="w-full max-w-2xl rounded-2xl p-6 border my-8" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
             <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: THEME.border }}>
               <div className="flex items-center gap-2"><Music style={{ color: THEME.pink }} size={20} /><h2 className="text-xl font-bold tracking-tight text-white">ตั้งค่าปฏิทินร้านและอีเวนต์</h2></div>
@@ -819,7 +1425,24 @@ export default function MonitorPage() {
                     <div className="space-y-4 pt-1 animate-fade-in">
                       <div className="grid grid-cols-1 gap-3">
                         <div><label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อคอนเสิร์ต / ศิลปิน</label><input type="text" placeholder="e.g. Three Man Down Live" value={eventTitle} onChange={(e) => { setEventTitle(e.target.value); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500" style={{ borderColor: THEME.border }} /></div>
-                        <div><label className="block text-xs font-semibold mb-1 text-gray-300">ราคาค่าบัตรเหมาต่อโต๊ะ (บาท)</label><div className="relative flex items-center"><DollarSign size={15} className="absolute left-3.5 text-amber-400" /><input type="number" value={eventPrice} onChange={(e) => { setEventPrice(Number(e.target.value)); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono" style={{ borderColor: THEME.border }} /></div></div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold mb-1 text-gray-300">ราคาเหมา (บาท/โต๊ะ)</label>
+                            <div className="relative flex items-center">
+                              <DollarSign size={15} className="absolute left-3.5 text-amber-400" />
+                              <input type="number" value={eventPrice} onChange={(e) => { setEventPrice(Number(e.target.value)); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-amber-500 font-mono" style={{ borderColor: THEME.border }} />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold mb-1 text-gray-300">เสริมเกิน 4 คน (บาท/คน)</label>
+                            <div className="relative flex items-center">
+                              <Plus size={15} className="absolute left-3.5 text-pink-400" />
+                              <input type="number" value={eventExtraPrice} onChange={(e) => { setEventExtraPrice(Number(e.target.value)); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono" style={{ borderColor: THEME.border }} />
+                            </div>
+                          </div>
+                        </div>
+                        
                       </div>
                       <div><label className="block text-xs font-semibold mb-1 text-gray-300 flex items-center gap-1"><FileText size={13} /> รายละเอียดของแถม</label><textarea rows={3} placeholder="ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." value={perksNote} onChange={(e) => { setPerksNote(e.target.value); }} className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" style={{ borderColor: THEME.border }} /></div>
                     </div>
@@ -847,7 +1470,7 @@ export default function MonitorPage() {
       )}
 
       {isReportModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-all">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[90] transition-all">
           <div className="w-full max-w-md rounded-2xl p-6 border" style={{ backgroundColor: THEME.card, borderColor: THEME.border }}>
             <div className="flex items-center gap-2 mb-4"><AlertTriangle style={{ color: THEME.gold }} size={20} /><h2 className="text-xl font-bold tracking-tight text-white">รายงานปัญหาคิวจองระบบ</h2></div>
             <form onSubmit={handleSendReport} className="space-y-4 text-sm">
@@ -883,12 +1506,14 @@ function BookingCard({
   booking, 
   eventPrice,
   onUpdateStatus,
-  onViewSlip 
+  onViewSlip,
+  role 
 }: { 
   booking: any;
   eventPrice: number;
   onUpdateStatus: (id: string, nextStatus: 'confirmed' | 'checked_in' | 'no_show') => Promise<void>;
   onViewSlip: (b: any) => void;
+  role: UserRole;
 }) {
   const zone = zoneOf(booking.table_number);
   const derived = deriveStatus(booking);
@@ -902,9 +1527,11 @@ function BookingCard({
         <div className="absolute left-0 top-0 h-full w-1" style={{ backgroundColor: booking.status === 'pending' ? THEME.amber : zone.accent }} />
         <div className="flex items-start justify-between relative">
           <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-mono text-xs font-bold" style={{ backgroundColor: `${zone.accent}1A`, color: zone.accent }}><zone.icon size={13} />{booking.table_number}</div>
-          <div className="flex items-center gap-1.5">
-            <span className={`h-2 w-2 rounded-full ${booking.status === 'pending' ? 'animate-ping' : ''}`} style={{ backgroundColor: currentMeta.dot, boxShadow: (derived === 'tonight' || booking.status === 'pending') ? `0 0 10px ${currentMeta.dot}` : 'none' }} />
-            <span className="font-mono text-[10px] font-bold tracking-widest" style={{ color: currentMeta.color }}>{currentMeta.label}</span>
+          <div className="flex items-center gap-1.5 flex-col items-end">
+            <div className="flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${booking.status === 'pending' ? 'animate-ping' : ''}`} style={{ backgroundColor: currentMeta.dot, boxShadow: (derived === 'tonight' || booking.status === 'pending') ? `0 0 10px ${currentMeta.dot}` : 'none' }} />
+              <span className="font-mono text-[10px] font-bold tracking-widest" style={{ color: currentMeta.color }}>{currentMeta.label}</span>
+            </div>
           </div>
         </div>
         <h3 className="mt-4 truncate text-lg font-bold text-white pr-6 relative">{booking.customer_name}<div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400"><Eye size={16} /></div></h3>
@@ -912,7 +1539,21 @@ function BookingCard({
           <span className="flex items-center gap-1.5"><Hash size={12} /> {booking.booking_code}</span>
           {eventPrice > 0 && booking.status !== 'pending' && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-sans">Paid: {totalPaidForThisBooking.toLocaleString()} ฿</span>}
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-y-2.5 text-sm" style={{ color: THEME.muted }}>
+        
+        <div className="mt-3 grid grid-cols-2 gap-y-1.5 text-[11px]">
+          {booking.sales_name ? (
+             <div className="col-span-2 flex items-center gap-1.5 text-[#00F5D4] bg-[#00F5D4]/5 rounded px-1.5 py-0.5 border border-[#00F5D4]/20 truncate">
+               <Briefcase size={12}/> <span className="truncate">เซลล์: {booking.sales_name}</span>
+             </div>
+          ) : null}
+          {booking.member_code ? (
+             <div className="col-span-2 flex items-center gap-1.5 text-amber-400 bg-amber-500/5 rounded px-1.5 py-0.5 border border-amber-500/20 truncate">
+               <Ticket size={12}/> <span className="font-mono truncate">{booking.member_code}</span>
+             </div>
+          ) : null}
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-y-2.5 text-sm" style={{ color: THEME.muted }}>
           <DetailRow icon={CalendarDays} value={booking.booking_date} />
           <DetailRow icon={Clock} value={booking.booking_time?.includes('19:00') || booking.booking_time === '19:00:00' ? '19:00 - 23:00' : (booking.booking_time || '').slice(0, 5)} />
           <DetailRow icon={Users} value={`${booking.guests_count} ท่าน`} />
@@ -922,9 +1563,19 @@ function BookingCard({
       <div className="px-5 pb-5 pt-0">
         <div className="pt-3 flex gap-2 border-t" style={{ borderColor: THEME.border }}>
           {booking.status === 'pending' ? (
-            <button type="button" onClick={() => onViewSlip(booking)} className="w-full py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 text-black hover:opacity-90" style={{ backgroundColor: THEME.gold, boxShadow: `0 2px 10px rgba(229, 184, 66, 0.15)` }}><Eye size={14} className="stroke-[3]" />ตรวจสอบสลิปและยืนยัน</button>
+            <button type="button" onClick={() => onViewSlip(booking)} className="w-full py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all active:scale-95 text-black hover:opacity-90" style={{ backgroundColor: THEME.gold, boxShadow: `0 2px 10px rgba(229, 184, 66, 0.15)` }}><Eye size={14} className="stroke-[3]" />{role === 'sale' || role === 'reception' ? 'ดูสลิป' : 'ตรวจสอบสลิปและยืนยัน'}</button>
           ) : (!booking.status || booking.status === 'confirmed') && derived !== 'past' ? (
-            <><button type="button" onClick={() => onUpdateStatus(booking.id, 'checked_in')} className="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black text-emerald-400"><Check size={14} />เช็คอินเข้าร้าน</button><button type="button" onClick={() => onUpdateStatus(booking.id, 'no_show')} className="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400"><X size={14} />No Show</button></>
+            <>
+              {role !== 'sale' && (
+                <button type="button" onClick={() => onUpdateStatus(booking.id, 'checked_in')} className="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black text-emerald-400"><Check size={14} />เช็คอินเข้าร้าน</button>
+              )}
+              {role === 'owner' && (
+                <button type="button" onClick={() => onUpdateStatus(booking.id, 'no_show')} className="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400"><X size={14} />No Show / ยกเลิกคิว</button>
+              )}
+              {role === 'sale' && (
+                <button type="button" onClick={() => onViewSlip(booking)} className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 bg-black/20 hover:bg-white/10 text-gray-400 border border-slate-800"><Eye size={14} />รายละเอียด</button>
+              )}
+            </>
           ) : (
             <button type="button" onClick={() => onViewSlip(booking)} className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 bg-black/20 hover:bg-white/10 text-gray-400 border border-slate-800"><Eye size={14} />ดูรายละเอียด / สลิป</button>
           )}
