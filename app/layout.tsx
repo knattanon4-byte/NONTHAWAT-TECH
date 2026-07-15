@@ -1,5 +1,6 @@
 import './globals.css';
 import React from 'react';
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: "ร้าน เรๅ สาขาศรีนครินทร์ | ระบบจองโต๊ะ",
