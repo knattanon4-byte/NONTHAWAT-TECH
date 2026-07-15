@@ -1,9 +1,9 @@
 import './globals.css';
 import React from 'react';
 
-export const metadata = {
-  title: 'NONTHAWAT.TECH PLATFORM',
-  description: 'Multi-Tenant SaaS Infrastructure Hub',
+export const metadata: Metadata = {
+  title: "ร้าน เรๅ สาขาศรีนครินทร์ | ระบบจองโต๊ะ",
+  description: "ระบบจองคิวและจัดการโต๊ะอาหาร...",
 };
 
 export default function RootLayout({
