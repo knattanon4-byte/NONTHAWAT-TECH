@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 // 🟢 ฝัง Token และ Room ID ของบอสตรงๆ ตามคำสั่งครับ
-const LINE_CHANNEL_ACCESS_TOKEN = 'SioNMArve5JVCsXTXREDYSIZIiXT5J1TtHw3V1K/2ih3sfS+LU21hyHFTbRiJvtR8yI9aAz98Y3CqJXNzvJtsAwpQTXNR1MrVa0sUBL+3YO+nlm9rLtixKlaLP/+JzYxUNOuIkSXatMFUTUlmcUMRwdB04t89/1O/w1cDnyilFU='; 
+const LINE_CHANNEL_ACCESS_TOKEN = 'lQyjTwldONqWljwu0zm0bXX7O/+rNwzBtbHqZyAjMP+aTv4YL+d3+mMGBC82pmnj8yI9aAz98Y3CqJXNzvJtsA wpQTXNR1MrVa0sUBL+3YPOiguyI7g/auod4mYoQfyl1R/Yz9rsKbvbZVSkAlUtsQdB04t89/1O/w1cDnyilFU='; 
 const LINE_TARGET_ID = 'Ccbf8a8d104dd53e7cfc08e98d48caf2f'; 
 
 export async function POST(request: Request) {
