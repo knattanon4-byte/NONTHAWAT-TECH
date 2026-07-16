@@ -142,7 +142,7 @@ export default function MonitorPage() {
   const [eventType, setEventType] = useState<'normal' | 'concert' | 'party' | 'closed'>('normal');
   const [eventTitle, setEventTitle] = useState('');
   const [eventPrice, setEventPrice] = useState(5000);
-  const [eventMemberPrice, setEventMemberPrice] = useState(4000); // 🟢 4. เพิ่มสเตทราคาสำหรับ Member
+  const [eventMemberPrice, setEventMemberPrice] = useState(4000); 
   const [eventExtraPrice, setEventExtraPrice] = useState(0);
 
   const [perksNote, setPerksNote] = useState('');
@@ -317,7 +317,7 @@ export default function MonitorPage() {
       setEventType(ev.event_type || 'normal');
       setEventTitle(ev.title || '');
       setEventPrice(ev.price || 0);
-      setEventMemberPrice(ev.member_price || 0); // 🟢 ดึงข้อมูลราคา Member มาแสดงตอนเปิดแก้ไข
+      setEventMemberPrice(ev.member_price || 0); 
       setEventExtraPrice(ev.extra_price_per_head || 0); 
       setPerksNote(ev.perks_note || '');
       setImagePreview(ev.image_url || null);
@@ -439,31 +439,31 @@ export default function MonitorPage() {
     setAdminSelectedTables(prev => prev.includes(tableNum) ? prev.filter(t => t !== tableNum) : [...prev, tableNum]);
   };
 
-  // 🟢 คำนวณราคาสำหรับระบบหลังบ้าน (ตรวจสอบรหัสและคิดแยกเงื่อนไขตามบอสสั่ง)
+  // 🟢 คำนวณราคาสำหรับ Member คิดตามจำนวนคนโดยตรง
   const adminTotalPrice = useMemo(() => {
     const ev = eventsMap[adminSelectedDate];
     if (!ev || ev.event_type !== 'concert') return 0;
 
-    // ระบบจะไปค้นจากรหัสที่กรอกเพื่อดึงประเภท (กันโกงพนักงานแอบคลิกปุ่มสิทธิ์เอง)
     let detectedType = 'normal';
     if (adminForm.memberCode.trim()) {
       const found = membersList.find(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
-      if (found) {
-        detectedType = found.role_type || 'member';
-      }
+      if (found) detectedType = found.role_type || 'member';
     }
 
-    if (detectedType === 'vip') return 0; // 🔴 สิทธิ์ VIP ฟรีค่าโต๊ะ 100%
+    if (detectedType === 'vip') return 0;
 
-    // 🔴 เงื่อนไขพิเศษ: ถ้าใส่กรอกครบทั้งชื่อเซลล์ และรหัสสมาชิก จะถูกคิดราคาแยกสำหรับ Member
-    const isMemberDiscount = detectedType === 'member' && adminForm.saleName.trim() !== '';
-    const tablePrice = isMemberDiscount ? (ev.member_price || ev.price) : ev.price;
+    const isSalesMember = adminForm.saleName.trim() !== '' && detectedType === 'member';
 
-    const ticketPrice = ev.extra_price_per_head || 0;
-    const basePrice = tablePrice * adminSelectedTables.length;
-    const extraGuests = Math.max(0, adminForm.guests - (4 * adminSelectedTables.length));
-    const extraPrice = extraGuests * ticketPrice;
-    return basePrice + extraPrice;
+    if (isSalesMember) {
+      // 🔴 คิดเงินตามจำนวนคน
+      return (ev.member_price || 0) * adminForm.guests;
+    } else {
+      const ticketPrice = ev.extra_price_per_head || 0;
+      const basePrice = ev.price * adminSelectedTables.length;
+      const extraGuests = Math.max(0, adminForm.guests - (4 * adminSelectedTables.length));
+      const extraPrice = extraGuests * ticketPrice;
+      return basePrice + extraPrice;
+    }
   }, [adminSelectedDate, eventsMap, adminSelectedTables.length, adminForm.guests, adminForm.memberCode, adminForm.saleName, membersList]);
 
   const isAdminSlipRequired = useMemo(() => {
@@ -481,22 +481,23 @@ export default function MonitorPage() {
       if (found) detectedType = found.role_type || 'member';
     }
 
-    const ticketPrice = ev?.extra_price_per_head || 0;
-    const isMemberDiscount = detectedType === 'member' && adminForm.saleName.trim() !== '';
-    const tablePrice = isMemberDiscount ? (ev?.member_price || ev?.price || 0) : (ev?.price || 0);
-    
-    const basePrice = tablePrice * adminSelectedTables.length;
-    const extraGuests = Math.max(0, adminForm.guests - (4 * adminSelectedTables.length));
-    const extraPrice = extraGuests * ticketPrice;
-
     let priceDetails = '';
     if (isConcert) {
       if (detectedType === 'vip') {
         priceDetails = `\n💰 ยอดโอน: 0 บาท (ใช้สิทธิ์ VIP)`;
       } else {
-        priceDetails = `\n💵 ค่าโต๊ะ (${adminSelectedTables.length}): ${basePrice.toLocaleString()} บ. ${isMemberDiscount ? '(ราคา Member)' : ''}`;
-        if (extraGuests > 0) {
-          priceDetails += `\n💵 ค่าเสริม (${extraGuests} คน): ${extraPrice.toLocaleString()} บ.`;
+        const isSalesMember = adminForm.saleName.trim() !== '' && detectedType === 'member';
+        if (isSalesMember) {
+          priceDetails = `\n💵 ค่าบัตร Member เซลล์ (${adminForm.guests} คน): ${adminTotalPrice.toLocaleString()} บ.`;
+        } else {
+          const ticketPrice = ev?.extra_price_per_head || 0;
+          const basePrice = (ev?.price || 0) * adminSelectedTables.length;
+          const extraGuests = Math.max(0, adminForm.guests - (4 * adminSelectedTables.length));
+          const extraPrice = extraGuests * ticketPrice;
+          priceDetails = `\n💵 ค่าโต๊ะ (${adminSelectedTables.length}): ${basePrice.toLocaleString()} บ.`;
+          if (extraGuests > 0) {
+            priceDetails += `\n💵 ค่าเสริม (${extraGuests} คน): ${extraPrice.toLocaleString()} บ.`;
+          }
         }
         priceDetails += `\n💰 ยอดโอน: ${adminTotalPrice.toLocaleString()} บาท`;
       }
@@ -515,8 +516,13 @@ export default function MonitorPage() {
     if (adminSelectedTables.length === 0) return;
     if (!adminForm.name) { triggerNotice('error', 'ข้อมูลไม่ครบ', 'กรุณาระบุชื่อลูกค้าครับ'); return; }
 
+    if (adminForm.guests < 4) {
+      triggerNotice('error', 'ผิดเงื่อนไข', 'ลูกค้าทุกประเภทจำเป็นต้องจองขั้นต่ำ 4 ท่านครับ');
+      setAdminForm({ ...adminForm, guests: 4 });
+      return;
+    }
+
     let detectedType = 'normal';
-    // 🟢 ระบบดึงข้อมูลจาก Database ผ่านรหัสสมาชิกตรงๆ ไม่ให้พนักงานกดปุ่มเองเพื่อกันโกง
     if (adminForm.memberCode.trim()) {
       const found = membersList.find(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
       if (!found) {
@@ -669,7 +675,7 @@ export default function MonitorPage() {
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `${shopSlug}-${eventDate}-${Math.floor(1000 + Math.random() * 9000)}.${fileExt}`;
         const filePath = `${fileName}`;
-        const { error: uploadError } = await supabase.storage.from('event-posters').upload(filePath, imageFile, { cacheControl: '3600', upsert: true });
+        const { error: uploadError = null } = await supabase.storage.from('event-posters').upload(filePath, imageFile, { cacheControl: '3600', upsert: true });
         if (uploadError) throw uploadError;
         const { data: urlData } = supabase.storage.from('event-posters').getPublicUrl(filePath);
         uploadedImageUrl = urlData.publicUrl;
@@ -681,7 +687,7 @@ export default function MonitorPage() {
         event_type: eventType,
         title: (eventType === 'concert' || eventType === 'party') ? eventTitle : eventType === 'closed' ? 'วันหยุดร้าน' : 'วันบริการปกติ',
         price: eventType === 'concert' ? eventPrice : 0, 
-        member_price: eventType === 'concert' ? eventMemberPrice : 0, // 🟢 ส่งราคา Member บันทึกลงตารางฐานข้อมูลคลาวด์
+        member_price: eventType === 'concert' ? eventMemberPrice : 0, 
         extra_price_per_head: eventType === 'concert' ? eventExtraPrice : 0, 
         perks_note: (eventType === 'concert' || eventType === 'party') ? perksNote : eventType === 'closed' ? 'ปิดรับจองออนไลน์ วันหยุดทำการ' : 'จองฟรี ไม่มีค่าบริการ',
         image_url: (eventType === 'concert' || eventType === 'party') ? uploadedImageUrl : null,
@@ -748,11 +754,21 @@ export default function MonitorPage() {
     const link = document.createElement('a'); link.href = url; link.setAttribute('download', `Report_Monitor_${shopSlug}_${new Date().toISOString().split('T')[0]}.csv`); link.click();
   };
 
+  // 🟢 คำนวณรายได้รวมหน้า Dashboard รวมการคูณตามจำนวนคนของ Member
   const totalRevenue = useMemo(() => {
     return bookings.reduce((sum, b) => {
       if (b.status === 'pending' || b.status === 'no_show') return sum;
-      const tablePrice = eventsMap[b.booking_date]?.price || 0;
-      return sum + tablePrice;
+      
+      const ev = eventsMap[b.booking_date];
+      if (!ev) return sum;
+
+      // ถ้าเป็น Member และมีเซลล์ ให้ใช้ member_price คูณจำนวนคน
+      if (b.customer_type === 'member' && b.sales_name) {
+        return sum + ((ev.member_price || 0) * b.guests_count);
+      }
+      
+      // ถ้าปกติให้ใช้ราคาเหมาต่อโต๊ะ
+      return sum + (ev.price || 0);
     }, 0);
   }, [eventsMap, bookings]);
 
@@ -768,6 +784,12 @@ export default function MonitorPage() {
     const dayBookings = bookings.filter(b => b.booking_date === adminSelectedDate && b.status !== 'no_show');
     return dayBookings.reduce((acc, curr) => ({ ...acc, [curr.table_number]: curr.status === 'pending' ? 'pending' : 'booked' }), {} as Record<string, 'booked' | 'pending'>);
   }, [bookings, adminSelectedDate]);
+
+  const currentDetectedAdminType = useMemo(() => {
+    if (!adminForm.memberCode.trim()) return 'normal';
+    const found = membersList.find(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
+    return found ? (found.role_type || 'member') : 'normal';
+  }, [adminForm.memberCode, membersList]);
 
   if (!shopExists) return notFound();
   if (authLoading) return ( <div className="min-h-screen flex items-center justify-center font-sans" style={{ backgroundColor: THEME.bg }}> <div className="text-center space-y-3"> <Loader2 size={36} className="animate-spin mx-auto" style={{ color: THEME.pink }} /> <p className="text-sm font-medium" style={{ color: THEME.muted }}>กำลังตรวจสอบสิทธิ์การเข้าถึงระบบควบคุม...</p> </div> </div> );
@@ -928,7 +950,7 @@ export default function MonitorPage() {
                           <BookingCard 
                             key={b.id} 
                             booking={b} 
-                            eventPrice={eventsMap[b.booking_date]?.price || 0}
+                            eventsMap={eventsMap} // 🟢 ส่ง eventsMap ให้ BookingCard เพื่อให้มันคำนวณตาม Logic ใหม่ได้
                             onUpdateStatus={handleUpdateStatus}
                             onViewSlip={(bookingData) => setSelectedBookingForSlip(bookingData)}
                             role={role}
@@ -1075,10 +1097,11 @@ export default function MonitorPage() {
                   )}
 
                   <div className="border-t border-slate-800/80 pt-3 mt-1 flex justify-between items-center bg-amber-500/5 -mx-4 px-4 pb-1">
-                    <span className="text-amber-500/80 text-xs font-bold">ราคาเหมา (ต่อ 1 โต๊ะ):</span> 
+                    <span className="text-amber-500/80 text-xs font-bold">ราคาสรุปสุทธิ (ใบนี้):</span> 
                     <span className="font-black text-amber-400 text-base">
-                      {selectedBookingForSlip.customer_type === 'member' && adminSelectedTables.length > 0 && eventsMap[selectedBookingForSlip.booking_date]?.member_price
-                        ? eventsMap[selectedBookingForSlip.booking_date].member_price.toLocaleString()
+                      {/* 🔴 Logic ใหม่: ถ้าเป็น Member ภายใต้เซลล์ คิดตามจำนวนคน! */}
+                      {selectedBookingForSlip.customer_type === 'member' && selectedBookingForSlip.sales_name
+                        ? ((eventsMap[selectedBookingForSlip.booking_date]?.member_price || 0) * selectedBookingForSlip.guests_count).toLocaleString()
                         : (eventsMap[selectedBookingForSlip.booking_date]?.price || 0).toLocaleString()} ฿
                     </span>
                   </div>
@@ -1155,7 +1178,6 @@ export default function MonitorPage() {
                         </div>
                       </div>
 
-                      {/* รูปที่ 1 และ 3: เปลี่ยน Layout ให้ชื่ออยู่บนสุด และใส่ชื่อเซลล์ (ไม่บังคับ) */}
                       <div className="space-y-3 bg-black/40 p-4 rounded-xl border border-slate-800">
                         <div>
                           <label className="block text-xs font-semibold mb-1 text-gray-300">ชื่อลูกค้า / นามแฝง</label>
@@ -1198,7 +1220,6 @@ export default function MonitorPage() {
                             </datalist>
                           </div>
                           
-                          {/* 🟢 รูปที่ 3: ถอดปุ่มกดสิทธิ์ออกทั้งหมด แล้วเปลี่ยนมาใช้ช่องตรวจรหัสผ่าน Database ป้องกันการโกง */}
                           <div className="pt-1">
                              <label className="block text-xs font-semibold mb-1.5 text-amber-400 flex items-center gap-1"><Crown size={13} /> ตรวจสอบสิทธิ์พิเศษ (Member / VIP)</label>
                              <input 
@@ -1245,6 +1266,13 @@ export default function MonitorPage() {
                          <div className="flex justify-between text-gray-300 text-xs"><span>ชื่อลูกค้า:</span><span className="font-bold text-white">{adminForm.name}</span></div>
                          <div className="flex justify-between text-gray-300 text-xs"><span>จำนวนคน:</span><span className="font-bold text-white">{adminForm.guests} ท่าน</span></div>
                          
+                         {currentDetectedAdminType !== 'normal' && (
+                           <div className="flex justify-between text-amber-400 text-xs">
+                             <span>ประเภทลูกค้า:</span>
+                             <span className="font-bold">{currentDetectedAdminType === 'vip' ? 'VIP (ฟรี)' : 'Member'}</span>
+                           </div>
+                         )}
+
                          <div className="flex justify-between items-center text-pink-400 font-bold border-t border-slate-800 pt-3 mt-1">
                            <span className="text-xs">ยอดรวมที่ต้องชำระ:</span>
                            <span className="text-xl tracking-tight">{adminTotalPrice.toLocaleString()} ฿</span>
@@ -1522,75 +1550,87 @@ export default function MonitorPage() {
                     </div>
                   </div>
                   
-                  {/* 🟢 ปรับ Layout ตามบอสสั่ง: แยกกลุ่มราคาไม่ให้อึดอัด และเว้นระยะช่องกิจกรรมเพิ่ม */}
-{eventType === 'concert' && (
-  <div className="space-y-5 pt-1 animate-fade-in">
-    
-    {/* แถวที่ 1: ราคาปกติ (เหมาโต๊ะ) จับคู่กับ บัตรเสริม (/คน) */}
-    <div className="grid grid-cols-2 gap-4">
-      <div>
-        <label className="block text-xs font-semibold mb-1.5 text-gray-300">ราคาปกติ (/โต๊ะ)</label>
-        <div className="relative flex items-center">
-          <DollarSign size={14} className="absolute left-3 text-amber-400" />
-          <input 
-            type="number" 
-            value={eventPrice} 
-            onChange={(e) => setEventPrice(Number(e.target.value))} 
-            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} 
-            className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-amber-500 font-mono text-sm" 
-            style={{ borderColor: THEME.border }} 
-          />
-        </div>
-      </div>
-      <div>
-        <label className="block text-xs font-semibold mb-1.5 text-gray-300">บัตรเสริมเกิน 4 คน (/คน)</label>
-        <div className="relative flex items-center">
-          <Plus size={14} className="absolute left-3 text-pink-400" />
-          <input 
-            type="number" 
-            value={eventExtraPrice} 
-            onChange={(e) => setEventExtraPrice(Number(e.target.value))} 
-            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} 
-            className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono text-sm" 
-            style={{ borderColor: THEME.border }} 
-          />
-        </div>
-      </div>
-    </div>
+                  {eventType === 'closed' && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs leading-relaxed animate-fade-in">
+                      <AlertTriangle size={14} className="inline mr-1" />
+                      ตั้งค่าวางระบบเป็นวันหยุดร้าน ลูกค้าจะไม่สามารถจองคิวออนไลน์ในวันนี้ได้ ระบบจะแจ้งเตือนลูกค้าทันทีเมื่อกดเลือกวันนี้ครับ
+                    </div>
+                  )}
 
-    {/* แถวที่ 2: ดึงราคา Member ลงมาอยู่เดี่ยวๆ ด้านล่างก่อนถึงกล่องรายละเอียดกิจกรรม */}
-    <div>
-      <label className="block text-xs font-semibold mb-1.5 text-purple-400">ราคา Member (/คน)</label>
-      <div className="relative flex items-center">
-        <Crown size={14} className="absolute left-3 text-purple-400" />
-        <input 
-          type="number" 
-          value={eventMemberPrice} 
-          onChange={(e) => setEventMemberPrice(Number(e.target.value))} 
-          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} 
-          className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-purple-300 outline-none focus:border-purple-500 font-mono text-sm" 
-          style={{ borderColor: THEME.border }} 
-        />
-      </div>
-    </div>
-
-    {/* เพิ่มระยะห่าง (Margin Top) ให้กับรายละเอียดของแถม/กิจกรรม ขยับหนีช่องราคาลงมาอีกหน่อยเพื่อความโล่งสบายตา */}
-    <div className="pt-2">
-      <label className="block text-xs font-semibold mb-1.5 text-gray-300 flex items-center gap-1">
-        <FileText size={13} /> รายละเอียดของแถม/กิจกรรม
-      </label>
-      <textarea 
-        rows={3} 
-        placeholder="ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." 
-        value={perksNote} 
-        onChange={(e) => setPerksNote(e.target.value)} 
-        className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" 
-        style={{ borderColor: THEME.border }} 
-      />
-    </div>
-
-  </div>
-)}
+                  {(eventType === 'concert' || eventType === 'party') && (
+                    <div className="space-y-4 pt-1 animate-fade-in">
+                      <div className="grid grid-cols-1 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold mb-1 text-gray-300">
+                            {eventType === 'concert' ? 'ชื่อคอนเสิร์ต / ศิลปิน' : 'ชื่อปาร์ตี้ / กิจกรรม'}
+                          </label>
+                          <input type="text" placeholder={eventType === 'concert' ? "e.g. Three Man Down Live" : "e.g. โชว์นางแบบพิเศษ"} value={eventTitle} onChange={(e) => { setEventTitle(e.target.value); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} className="w-full bg-black/20 border rounded-xl px-4 h-11 text-white outline-none focus:border-pink-500" style={{ borderColor: THEME.border }} />
+                        </div>
+                        
+                        {eventType === 'concert' && (
+                          <div className="space-y-5 pt-1 animate-fade-in">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-gray-300">ราคาปกติ (/โต๊ะ)</label>
+                                <div className="relative flex items-center">
+                                  <DollarSign size={14} className="absolute left-3 text-amber-400" />
+                                  <input 
+                                    type="number" 
+                                    value={eventPrice} 
+                                    onChange={(e) => setEventPrice(Number(e.target.value))} 
+                                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} 
+                                    className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-amber-500 font-mono text-sm" 
+                                    style={{ borderColor: THEME.border }} 
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-gray-300">บัตรเสริมเกิน 4 คน (/คน)</label>
+                                <div className="relative flex items-center">
+                                  <Plus size={14} className="absolute left-3 text-pink-400" />
+                                  <input 
+                                    type="number" 
+                                    value={eventExtraPrice} 
+                                    onChange={(e) => setEventExtraPrice(Number(e.target.value))} 
+                                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} 
+                                    className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-white outline-none focus:border-pink-500 font-mono text-sm" 
+                                    style={{ borderColor: THEME.border }} 
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold mb-1.5 text-purple-400">ราคา Member (/คน)</label>
+                              <div className="relative flex items-center">
+                                <Crown size={14} className="absolute left-3 text-purple-400" />
+                                <input 
+                                  type="number" 
+                                  value={eventMemberPrice} 
+                                  onChange={(e) => setEventMemberPrice(Number(e.target.value))} 
+                                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} 
+                                  className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-purple-300 outline-none focus:border-purple-500 font-mono text-sm" 
+                                  style={{ borderColor: THEME.border }} 
+                                />
+                              </div>
+                            </div>
+                            <div className="pt-2">
+                              <label className="block text-xs font-semibold mb-1.5 text-gray-300 flex items-center gap-1">
+                                <FileText size={13} /> รายละเอียดของแถม/กิจกรรม
+                              </label>
+                              <textarea 
+                                rows={3} 
+                                placeholder="ตั๋วเข้างานยกโต๊ะ นั่งได้สูงสุด 4 ท่าน ฟรีมิกเซอร์..." 
+                                value={perksNote} 
+                                onChange={(e) => setPerksNote(e.target.value)} 
+                                className="w-full bg-black/20 border rounded-xl p-3 text-white outline-none focus:border-pink-500 text-xs leading-relaxed resize-none" 
+                                style={{ borderColor: THEME.border }} 
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               {(eventType === 'concert' || eventType === 'party') && (
@@ -1651,13 +1691,13 @@ function StatPill({ icon: Icon, label, value, accent }: { icon: LucideIcon; labe
 
 function BookingCard({ 
   booking, 
-  eventPrice,
+  eventsMap,
   onUpdateStatus,
   onViewSlip,
   role 
 }: { 
   booking: any;
-  eventPrice: number;
+  eventsMap: Record<string, any>;
   onUpdateStatus: (id: string, nextStatus: 'confirmed' | 'checked_in' | 'no_show') => Promise<void>;
   onViewSlip: (b: any) => void;
   role: UserRole;
@@ -1666,7 +1706,15 @@ function BookingCard({
   const derived = deriveStatus(booking);
   let currentMeta = STATUS_META[booking.status] || STATUS_META[derived];
 
-  const totalPaidForThisBooking = eventPrice;
+  const totalPaidForThisBooking = useMemo(() => {
+    const ev = eventsMap[booking.booking_date];
+    if (!ev) return 0;
+    
+    if (booking.customer_type === 'member' && booking.sales_name) {
+        return (ev.member_price || 0) * booking.guests_count;
+    }
+    return ev.price || 0;
+  }, [booking, eventsMap]);
 
   return (
     <div className="group relative overflow-hidden rounded-2xl transition-all hover:-translate-y-0.5 flex flex-col justify-between min-h-[230px]" style={{ backgroundColor: THEME.card, border: booking.status === 'checked_in' ? '1px solid rgba(0, 245, 212, 0.3)' : booking.status === 'pending' ? `1px solid ${THEME.amber}` : booking.status === 'no_show' ? '1px solid rgba(239, 68, 68, 0.2)' : `1px solid ${THEME.border}`, opacity: booking.status === 'no_show' || derived === 'past' ? 0.4 : 1 }}>
@@ -1684,7 +1732,7 @@ function BookingCard({
         <h3 className="mt-4 truncate text-lg font-bold text-white pr-6 relative">{booking.customer_name}<div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400"><Eye size={16} /></div></h3>
         <div className="mt-1 flex items-center justify-between font-mono text-xs" style={{ color: zone.accent }}>
           <span className="flex items-center gap-1.5"><Hash size={12} /> {booking.booking_code}</span>
-          {eventPrice > 0 && booking.status !== 'pending' && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-sans">Paid!</span>}
+          {totalPaidForThisBooking > 0 && booking.status !== 'pending' && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-sans">Paid!</span>}
         </div>
         
         <div className="mt-3 grid grid-cols-2 gap-y-1.5 text-[11px]">
