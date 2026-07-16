@@ -514,9 +514,13 @@ export default function MonitorPage() {
     if (adminSelectedTables.length === 0) return;
     if (!adminForm.name) { triggerNotice('error', 'ข้อมูลไม่ครบ', 'กรุณาระบุชื่อลูกค้าครับ'); return; }
 
-    if (adminForm.guests < 4) {
-      triggerNotice('error', 'ผิดเงื่อนไข', 'ลูกค้าทุกประเภทจำเป็นต้องจองขั้นต่ำ 4 ท่านครับ');
-      setAdminForm({ ...adminForm, guests: 4 });
+    const minRequiredGuests = adminSelectedTables.length * 4;
+    if (adminForm.guests < minRequiredGuests) {
+      triggerNotice(
+        'error', 
+        'ระบุจำนวนคนไม่ถูกต้อง', 
+        `คุณเลือกไว้ ${adminSelectedTables.length} โต๊ะ จำเป็นต้องระบุจำนวนสมาชิกอย่างน้อย ${minRequiredGuests} ท่านครับ (ขั้นต่ำ 4 ท่าน/โต๊ะ)`
+      );
       return;
     }
 
@@ -528,7 +532,6 @@ export default function MonitorPage() {
         return;
       }
       detectedType = found.role_type || 'member';
-      // 🟢 นำเงื่อนไขการใช้งานซ้ำออก เพื่อให้สมาชิกจองเพิ่มกี่รอบก็ได้ตามความต้องการ
     }
 
     if (isAdminSlipRequired) {
@@ -553,7 +556,6 @@ export default function MonitorPage() {
           member_code: adminForm.memberCode.trim() ? adminForm.memberCode.trim().toUpperCase() : null,
         }));
 
-        // 🟢 เคลียร์ประวัติ No Show กันจองทับซ้อน
         await supabase.from('restaurant_bookings')
           .delete()
           .eq('shop_id', shopSlug)
@@ -615,7 +617,6 @@ export default function MonitorPage() {
         member_code: adminForm.memberCode.trim() ? adminForm.memberCode.trim().toUpperCase() : null,
       }));
 
-      // 🟢 เคลียร์ประวัติ No Show กันจองทับซ้อน
       await supabase.from('restaurant_bookings')
         .delete()
         .eq('shop_id', shopSlug)
@@ -739,7 +740,7 @@ export default function MonitorPage() {
           b.booking_code?.toLowerCase().includes(q) || 
           b.phone?.toLowerCase().includes(q) || 
           b.sales_name?.toLowerCase().includes(q) ||
-          b.member_code?.toLowerCase().includes(q) // 🟢 เพิ่มการค้นหาด้วย Member Code
+          b.member_code?.toLowerCase().includes(q)
         ); 
       }
       return true;
@@ -1204,7 +1205,15 @@ export default function MonitorPage() {
                           </div>
                           <div>
                             <label className="block text-xs font-semibold mb-1 text-gray-300">จำนวนคน</label>
-                            <input type="number" min="1" value={adminForm.guests} onChange={e => setAdminForm({...adminForm, guests: parseInt(e.target.value) || 1})} className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-white outline-none focus:border-emerald-500 text-sm text-center" />
+                            <input 
+                              type="number" 
+                              value={adminForm.guests === 0 ? '' : adminForm.guests} 
+                              onChange={e => {
+                                  const val = e.target.value;
+                                  setAdminForm({...adminForm, guests: val === '' ? 0 : parseInt(val, 10)});
+                              }} 
+                              className="w-full bg-black/20 border border-slate-700 rounded-lg px-3 h-10 text-white outline-none focus:border-emerald-500 text-sm text-center" 
+                            />
                           </div>
                         </div>
                       </div>

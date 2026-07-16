@@ -209,9 +209,9 @@ export default function BookingPage() {
       fetchTodayBookings(bookingDate); setSelectedTables([]); return;
     }
 
-    if (guestsCount < 4) {
-      triggerError(`ขออภัยครับ ข้อกำหนดของทางร้านจำเป็นต้องมีสมาชิกขั้นต่ำ 4 ท่านครับ`);
-      setGuestsCount(4); 
+    const minRequiredGuests = selectedTables.length * 4;
+    if (guestsCount < minRequiredGuests) {
+      triggerError(`คุณระบุจำนวนคนไว้ ${guestsCount} ท่าน สามารถจองได้สูงสุดแค่ ${Math.floor(guestsCount / 4) || 1} โต๊ะครับ (ข้อกำหนดขั้นต่ำ 4 ท่าน/โต๊ะ)`);
       return;
     }
 
@@ -239,8 +239,6 @@ export default function BookingPage() {
         triggerError(`ไม่พบรหัสสมาชิก หรือรหัส VIP นี้ในระบบ กรุณาตรวจสอบอีกครั้งครับ`);
         return;
       }
-
-      // 🟢 นำเงื่อนไขเช็คสิทธิ์ซ้ำออก ให้สามารถจองได้หลายครั้ง
 
       vipData = memberData;
       const anyMemberData = memberData as any;
@@ -305,7 +303,6 @@ export default function BookingPage() {
         sales_name: salesNameInput.trim() || null
       }));
 
-      // 🟢 เคลียร์ประวัติ No Show ของโต๊ะที่เลือกในวันนั้นทิ้งก่อน เพื่อกัน Database ฟ้องจองซ้ำ
       await supabase.from('restaurant_bookings')
         .delete()
         .eq('shop_id', shopSlug)
@@ -330,7 +327,6 @@ export default function BookingPage() {
           const isVipText = memberCodeInput.trim() ? `\n🎟️ Code: ${memberCodeInput.trim()}` : '';
           const isSalesText = salesNameInput.trim() ? `\n🧑‍💼 เซลล์ผู้ดูแล: ${salesNameInput.trim()}` : '';
           
-          // 🟢 แก้ไขข้อความสรุปยอดใน LINE ให้ตรงตามเงื่อนไขเป๊ะๆ
           let breakdownMsg = ``;
           if (!isVipFree && selectedTables.length > 0) {
             if (isSalesMember) {
@@ -481,18 +477,42 @@ export default function BookingPage() {
                 </div>
               ) : (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 w-full">
-                  <div className="space-y-2 w-full">
-                    <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-300"><Clock size={18} /> 2. ระบุเวลาเข้าโต๊ะ</label>
-                    <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-14 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
-                      <select value={bookingTime} onChange={(e) => setBookingTime(e.target.value)} className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-lg font-medium">
-                        <option value="19:00" style={{ backgroundColor: THEME.card }}>19:00 น. </option><option value="20:00" style={{ backgroundColor: THEME.card }}>20:00 น. </option><option value="21:00" style={{ backgroundColor: THEME.card }}>21:00 น. </option><option value="22:00" style={{ backgroundColor: THEME.card }}>22:00 น. </option><option value="23:00" style={{ backgroundColor: THEME.card }}>23:00 น.</option>
-                      </select>
-                      <ChevronDown size={18} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} />
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 w-full">
+                    <div className="space-y-2 w-full">
+                      <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-300"><Clock size={18} /> 2. ระบุเวลาเข้าโต๊ะ</label>
+                      <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-14 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
+                        <select value={bookingTime} onChange={(e) => setBookingTime(e.target.value)} className="w-full h-full cursor-pointer appearance-none bg-transparent px-4 text-white outline-none text-lg font-medium">
+                          <option value="19:00" style={{ backgroundColor: THEME.card }}>19:00 น. </option><option value="20:00" style={{ backgroundColor: THEME.card }}>20:00 น. </option><option value="21:00" style={{ backgroundColor: THEME.card }}>21:00 น. </option><option value="22:00" style={{ backgroundColor: THEME.card }}>22:00 น. </option><option value="23:00" style={{ backgroundColor: THEME.card }}>23:00 น.</option>
+                        </select>
+                        <ChevronDown size={18} className="pointer-events-none absolute right-4" style={{ color: THEME.muted }} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 w-full">
+                        <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-300">
+                          <Users size={18} style={{ color: THEME.pink }} /> 3. ระบุจำนวนคน <span className="text-xs text-gray-500 font-normal ml-1">(ขั้นต่ำ 4)</span>
+                        </label>
+                        <div className="relative flex items-center justify-between rounded-xl border bg-black/40 w-full h-14 px-3 transition-all duration-200 focus-within:border-amber-400" style={{ borderColor: THEME.border }}>
+                          <button type="button" onClick={() => setGuestsCount(prev => Math.max(4, prev - 1))} className="w-10 h-10 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white"><Minus size={16} /></button>
+                          <input 
+                            type="number" 
+                            placeholder="ระบุจำนวน" 
+                            value={guestsCount === 0 ? '' : guestsCount} 
+                            onChange={(e) => { const val = e.target.value; setGuestsCount(val === '' ? 0 : parseInt(val, 10)); }} 
+                            onBlur={() => { if (guestsCount < 4) setGuestsCount(4); }}
+                            className="w-16 bg-transparent text-center text-white outline-none text-xl font-bold text-pink-400 block h-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                          />
+                          <button type="button" onClick={() => setGuestsCount(prev => prev + 1)} className="w-10 h-10 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white"><Plus size={16} /></button>
+                        </div>
                     </div>
                   </div>
 
                   <div className="space-y-2 w-full">
-                    <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-200 leading-tight">3. คลิกเลือกตำแหน่งโต๊ะอาหารบนแผนผังร้าน <span className="text-pink-400 text-sm ml-1">(เลือกได้หลายโต๊ะ)</span></label>
+                    <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-200 leading-tight">
+                      4. คลิกเลือกตำแหน่งโต๊ะอาหารบนแผนผังร้าน 
+                      <span className="text-pink-400 text-sm ml-1">(เลือกได้สูงสุด {Math.floor(guestsCount / 4) || 1} โต๊ะ)</span>
+                    </label>
                     <div className="w-full rounded-2xl bg-black/40 p-1 border box-sizing-border overflow-x-auto relative min-h-[240px] flex items-center justify-center transition-all duration-300" style={{ borderColor: THEME.border }}>
                       <FloorPlan selectedTables={selectedTables} setSelectedTables={setSelectedTables} dayTables={dayTables} />
                     </div>
@@ -506,17 +526,21 @@ export default function BookingPage() {
                     </div>
                   </div>
 
+                  {/* 🟢 5. ข้อมูลลูกค้าและสิทธิ์พิเศษ */}
                   <div className="space-y-4 pt-4 w-full border-t border-slate-800/80 mt-5">
                     <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-200 leading-tight mb-2">
-                      4. ข้อมูลลูกค้าและสิทธิ์พิเศษ
+                      5. ข้อมูลลูกค้าและสิทธิ์พิเศษ
                     </label>
 
                     <div className="flex flex-col gap-4 sm:gap-5 w-full">
+                      
+                      {/* ชื่อเต็มแถว */}
                       <div className="space-y-2 w-full">
                         <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><User size={16} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง</label>
                         <input type="text" required placeholder="กรอกชื่อและนามสกุลของคุณ..." value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
                       </div>
 
+                      {/* เบอร์โทรศัพท์ และ รหัสสมาชิก (คู่กัน) */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 w-full">
                         <div className="space-y-2 w-full">
                           <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Phone size={16} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ</label>
@@ -524,49 +548,8 @@ export default function BookingPage() {
                         </div>
 
                         <div className="space-y-2 w-full">
-                          <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Briefcase size={16} style={{ color: THEME.mint }} /> ชื่อเซลล์ / ผู้ดูแล <span className="text-xs text-gray-500 font-normal ml-1">(ถ้ามี)</span></label>
-                          <input type="text" placeholder="ระบุชื่อเซลล์ของคุณ..." value={salesNameInput} onChange={(e) => setSalesNameInput(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 w-full">
-                        <div className="space-y-2 w-full">
-                          <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                            <Users size={16} style={{ color: THEME.pink }} /> จำนวนคน <span className="text-xs text-gray-500 font-normal ml-1">(ขั้นต่ำ 4)</span>
-                          </label>
-                          <div className="relative flex items-center justify-between rounded-xl border bg-black/20 w-full h-12 px-2 transition-all duration-200" style={{ borderColor: THEME.border }}>
-                            <button 
-                              type="button" 
-                              disabled={selectedTables.length === 0 || guestsCount <= 4} 
-                              onClick={() => setGuestsCount(prev => Math.max(4, prev - 1))} 
-                              className="w-9 h-9 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"
-                            >
-                              <Minus size={14} />
-                            </button>
-                            <input 
-                              type="number" 
-                              disabled={selectedTables.length === 0} 
-                              value={selectedTables.length === 0 ? '' : guestsCount} 
-                              onChange={(e) => { 
-                                const val = parseInt(e.target.value); 
-                                setGuestsCount(isNaN(val) ? 4 : Math.max(4, val)); 
-                              }} 
-                              className="w-12 bg-transparent text-center text-white outline-none text-lg font-bold text-pink-400 block h-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
-                            />
-                            <button 
-                              type="button" 
-                              disabled={selectedTables.length === 0} 
-                              onClick={() => setGuestsCount(prev => prev + 1)} 
-                              className="w-9 h-9 rounded-lg flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-20"
-                            >
-                              <Plus size={14} />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 w-full">
                             <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300">
-                                <Crown size={16} className="text-amber-400" /> รหัสสมาชิก <span className="text-xs text-gray-500 font-normal ml-1">(ถ้ามี)</span>
+                                <Crown size={16} className="text-amber-400" /> รหัสสมาชิก / สิทธิ์พิเศษ <span className="text-xs text-gray-500 font-normal ml-1">(ถ้ามี)</span>
                             </label>
                             <div className="relative">
                                 <Crown size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500/70" />
@@ -575,11 +558,17 @@ export default function BookingPage() {
                                     placeholder="กรอกรหัสเพื่อรับสิทธิ์..." 
                                     value={memberCodeInput} 
                                     onChange={(e) => setMemberCodeInput(e.target.value.toUpperCase())} 
-                                    className="w-full bg-black/20 border rounded-xl pl-11 pr-4 h-12 text-white outline-none transition-all text-sm font-mono uppercase focus:border-amber-500"
+                                    className="w-full bg-black/20 border rounded-xl pl-11 pr-4 h-14 text-white outline-none transition-all text-sm font-mono uppercase focus:border-amber-500"
                                     style={{ borderColor: THEME.border }}
                                 />
                             </div>
                         </div>
+                      </div>
+
+                      {/* เซลล์เต็มแถว */}
+                      <div className="space-y-2 w-full">
+                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Briefcase size={16} style={{ color: THEME.mint }} /> ชื่อเซลล์ / ผู้ดูแล <span className="text-xs text-gray-500 font-normal ml-1">(ถ้ามี)</span></label>
+                        <input type="text" placeholder="ระบุชื่อเซลล์ของคุณ..." value={salesNameInput} onChange={(e) => setSalesNameInput(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
                       </div>
 
                     </div>
