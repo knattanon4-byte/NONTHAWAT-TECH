@@ -341,11 +341,15 @@ export default function BookingPage() {
 
           const lineMessage = `📢 ลูกค้าจองโต๊ะใหม่ (ออนไลน์)\n📌 โต๊ะ: ${tablesStr}\n👤 ชื่อ: ${customerName} ${typeLabel}${isVipText}${isSalesText}\n📞 โทร: ${phone}\n👥 จำนวน: ${guestsCount} ท่าน\n📅 วันที่: ${bookingDate}\n⏰ เวลา: ${bookingTime} น.${breakdownMsg}\n💰 ยอดโอน: ${calculatedTotalAmount.toLocaleString()} บาท`;
           
-          await fetch('/api/notify-line', {
+          const lineRes = await fetch('/api/notify-line', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: lineMessage, imageUrl: slipUrl })
           });
+          
+          if (!lineRes.ok) {
+            console.error('Failed to notify LINE API');
+          }
         } catch (lineErr) {
           console.error('Failed to notify LINE:', lineErr);
         }
@@ -526,7 +530,7 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  {/* 🟢 5. ข้อมูลลูกค้าและสิทธิ์พิเศษ */}
+                  {/* 🟢 5. ข้อมูลลูกค้าและสิทธิ์พิเศษ (ปรับ UI ใหม่แล้ว) */}
                   <div className="space-y-4 pt-4 w-full border-t border-slate-800/80 mt-5">
                     <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-200 leading-tight mb-2">
                       5. ข้อมูลลูกค้าและสิทธิ์พิเศษ
@@ -534,13 +538,19 @@ export default function BookingPage() {
 
                     <div className="flex flex-col gap-4 sm:gap-5 w-full">
                       
-                      {/* ชื่อเต็มแถว */}
-                      <div className="space-y-2 w-full">
-                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><User size={16} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง</label>
-                        <input type="text" required placeholder="กรอกชื่อและนามสกุลของคุณ..." value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
+                      {/* แถวที่ 1: ชื่อลูกค้า และ ชื่อเซลล์ (คู่กัน) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 w-full">
+                        <div className="space-y-2 w-full">
+                          <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><User size={16} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง</label>
+                          <input type="text" required placeholder="กรอกชื่อและนามสกุลของคุณ..." value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
+                        </div>
+                        <div className="space-y-2 w-full">
+                          <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Briefcase size={16} style={{ color: THEME.mint }} /> ชื่อเซลล์ / ผู้ดูแล <span className="text-xs text-gray-500 font-normal ml-1">(ถ้ามี)</span></label>
+                          <input type="text" placeholder="ระบุชื่อเซลล์ของคุณ..." value={salesNameInput} onChange={(e) => setSalesNameInput(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
+                        </div>
                       </div>
 
-                      {/* เบอร์โทรศัพท์ และ รหัสสมาชิก (คู่กัน) */}
+                      {/* แถวที่ 2: เบอร์โทรศัพท์ และ รหัสสมาชิก (คู่กัน) */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 w-full">
                         <div className="space-y-2 w-full">
                           <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Phone size={16} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ</label>
@@ -563,12 +573,6 @@ export default function BookingPage() {
                                 />
                             </div>
                         </div>
-                      </div>
-
-                      {/* เซลล์เต็มแถว */}
-                      <div className="space-y-2 w-full">
-                        <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Briefcase size={16} style={{ color: THEME.mint }} /> ชื่อเซลล์ / ผู้ดูแล <span className="text-xs text-gray-500 font-normal ml-1">(ถ้ามี)</span></label>
-                        <input type="text" placeholder="ระบุชื่อเซลล์ของคุณ..." value={salesNameInput} onChange={(e) => setSalesNameInput(e.target.value)} className="w-full bg-black/20 border rounded-xl px-4 h-14 text-white outline-none transition-all text-base block min-w-0 focus:border-purple-500 box-border" style={{ borderColor: THEME.border }} />
                       </div>
 
                     </div>

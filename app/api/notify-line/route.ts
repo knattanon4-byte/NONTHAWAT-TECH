@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 
-// 🟢 ใส่ Token และ Target ID ของบอสที่นี่ (ปลอดภัยเพราะรันบน Server)
-const LINE_CHANNEL_ACCESS_TOKEN = 'Hc0qtV0xC09Ry7lrPQ24FQdRp9XATOWIOOc4SVa/zc8TotlBGnJkropJ42SZRPu78yI9aAz98Y3CqJXNzvJtsAwpQTXNR1MrVa0sUBL+3YPOMdNZcj1PCU9rDTZ3egbazYAYXFJqv3QJqBVCrslHvgdB04t89/1O/w1cDnyilFU='; 
+// 🟢 ฝัง Token และ Room ID ของบอสตรงๆ ตามคำสั่งครับ
+const LINE_CHANNEL_ACCESS_TOKEN = 'SioNMArve5JVCsXTXREDYSIZIiXT5J1TtHw3V1K/2ih3sfS+LU21hyHFTbRiJvtR8yI9aAz98Y3CqJXNzvJtsAwpQTXNR1MrVa0sUBL+3YO+nlm9rLtixKlaLP/+JzYxUNOuIkSXatMFUTUlmcUMRwdB04t89/1O/w1cDnyilFU='; 
 const LINE_TARGET_ID = 'Ccbf8a8d104dd53e7cfc08e98d48caf2f'; 
 
 export async function POST(request: Request) {
   try {
     const { message, imageUrl } = await request.json();
 
-    // ประกอบร่างข้อความที่จะส่ง
+    // 1. เตรียมก้อนข้อความสรุปยอดจอง
     const messagesPayload: any[] = [
       {
         type: 'text',
@@ -16,16 +16,16 @@ export async function POST(request: Request) {
       },
     ];
 
-    // ถ้ามีการแนบสลิปมาด้วย ให้เพิ่มประเภทรูปภาพเข้าไปในแพ็กเกจ
+    // 2. ถ้าระบบส่งรูปลิงก์สลิปมาด้วย ให้ยัดลงไปเป็นรูปภาพเลย
     if (imageUrl) {
       messagesPayload.push({
         type: 'image',
         originalContentUrl: imageUrl,
-        previewImageUrl: imageUrl,
+        previewImageUrl: imageUrl, 
       });
     }
 
-    // ยิง API ไปหา LINE ทันที
+    // 3. ยิงคำสั่งไปที่ LINE Messaging API ทันที
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
       headers: {
@@ -40,13 +40,13 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('LINE API Error:', errorData);
+      console.error('🚨 LINE API Error:', errorData);
       return NextResponse.json({ success: false, error: errorData }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, message: 'ส่งแจ้งเตือนเข้า LINE เรียบร้อย!' });
+    return NextResponse.json({ success: true, message: 'ส่งแจ้งเตือนและรูปสลิปเข้า LINE เรียบร้อย!' });
   } catch (error: any) {
-    console.error('Server Error:', error);
+    console.error('🚨 Server Error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
