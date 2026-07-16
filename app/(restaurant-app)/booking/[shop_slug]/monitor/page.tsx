@@ -439,7 +439,6 @@ export default function MonitorPage() {
     setAdminSelectedTables(prev => prev.includes(tableNum) ? prev.filter(t => t !== tableNum) : [...prev, tableNum]);
   };
 
-  // 🟢 คำนวณราคาสำหรับ Member คิดตามจำนวนคนโดยตรง
   const adminTotalPrice = useMemo(() => {
     const ev = eventsMap[adminSelectedDate];
     if (!ev || ev.event_type !== 'concert') return 0;
@@ -455,7 +454,6 @@ export default function MonitorPage() {
     const isSalesMember = adminForm.saleName.trim() !== '' && detectedType === 'member';
 
     if (isSalesMember) {
-      // 🔴 คิดเงินตามจำนวนคน
       return (ev.member_price || 0) * adminForm.guests;
     } else {
       const ticketPrice = ev.extra_price_per_head || 0;
@@ -488,7 +486,7 @@ export default function MonitorPage() {
       } else {
         const isSalesMember = adminForm.saleName.trim() !== '' && detectedType === 'member';
         if (isSalesMember) {
-          priceDetails = `\n💵 ค่าบัตร Member เซลล์ (${adminForm.guests} คน): ${adminTotalPrice.toLocaleString()} บ.`;
+          priceDetails = `\n💵 ค่าบัตร Member (${adminForm.guests} คน): ${adminTotalPrice.toLocaleString()} บ.`;
         } else {
           const ticketPrice = ev?.extra_price_per_head || 0;
           const basePrice = (ev?.price || 0) * adminSelectedTables.length;
@@ -530,20 +528,7 @@ export default function MonitorPage() {
         return;
       }
       detectedType = found.role_type || 'member';
-
-      const { data: existingUsage } = await supabase
-        .from('restaurant_bookings')
-        .select('id')
-        .eq('shop_id', shopSlug)
-        .eq('booking_date', adminSelectedDate)
-        .eq('member_code', adminForm.memberCode.trim().toUpperCase())
-        .neq('status', 'no_show')
-        .limit(1);
-
-      if (existingUsage && existingUsage.length > 0) {
-        triggerNotice('error', 'สิทธิ์รหัสถูกใช้แล้ว', 'รหัสนี้ถูกใช้สำหรับรอบวันนี้ไปแล้ว ไม่สามารถใช้ซ้ำได้ครับ');
-        return;
-      }
+      // 🟢 นำเงื่อนไขการใช้งานซ้ำออก เพื่อให้สมาชิกจองเพิ่มกี่รอบก็ได้ตามความต้องการ
     }
 
     if (isAdminSlipRequired) {
@@ -567,6 +552,14 @@ export default function MonitorPage() {
           customer_type: detectedType,
           member_code: adminForm.memberCode.trim() ? adminForm.memberCode.trim().toUpperCase() : null,
         }));
+
+        // 🟢 เคลียร์ประวัติ No Show กันจองทับซ้อน
+        await supabase.from('restaurant_bookings')
+          .delete()
+          .eq('shop_id', shopSlug)
+          .eq('booking_date', adminSelectedDate)
+          .in('table_number', adminSelectedTables)
+          .eq('status', 'no_show');
 
         const { error } = await supabase.from('restaurant_bookings').insert(newBookings);
         if (error) throw error;
@@ -621,6 +614,14 @@ export default function MonitorPage() {
         customer_type: detectedType,
         member_code: adminForm.memberCode.trim() ? adminForm.memberCode.trim().toUpperCase() : null,
       }));
+
+      // 🟢 เคลียร์ประวัติ No Show กันจองทับซ้อน
+      await supabase.from('restaurant_bookings')
+        .delete()
+        .eq('shop_id', shopSlug)
+        .eq('booking_date', adminSelectedDate)
+        .in('table_number', adminSelectedTables)
+        .eq('status', 'no_show');
 
       const { error: insertError } = await supabase.from('restaurant_bookings').insert(newBookings);
       if (insertError) throw insertError;
@@ -732,7 +733,15 @@ export default function MonitorPage() {
       if (!matchesZone) return false;
       const liveStatus = deriveStatus(b);
       if (liveStatus === 'past' && !showPast && !q) return false;
-      if (q) { return (b.customer_name?.toLowerCase().includes(q) || b.booking_code?.toLowerCase().includes(q) || b.phone?.toLowerCase().includes(q) || b.sales_name?.toLowerCase().includes(q)); }
+      if (q) { 
+        return (
+          b.customer_name?.toLowerCase().includes(q) || 
+          b.booking_code?.toLowerCase().includes(q) || 
+          b.phone?.toLowerCase().includes(q) || 
+          b.sales_name?.toLowerCase().includes(q) ||
+          b.member_code?.toLowerCase().includes(q) // 🟢 เพิ่มการค้นหาด้วย Member Code
+        ); 
+      }
       return true;
     });
   }, [bookings, query, zone, showPast]);
@@ -754,7 +763,6 @@ export default function MonitorPage() {
     const link = document.createElement('a'); link.href = url; link.setAttribute('download', `Report_Monitor_${shopSlug}_${new Date().toISOString().split('T')[0]}.csv`); link.click();
   };
 
-  // 🟢 คำนวณรายได้รวมหน้า Dashboard รวมการคูณตามจำนวนคนของ Member
   const totalRevenue = useMemo(() => {
     return bookings.reduce((sum, b) => {
       if (b.status === 'pending' || b.status === 'no_show') return sum;
@@ -762,12 +770,10 @@ export default function MonitorPage() {
       const ev = eventsMap[b.booking_date];
       if (!ev) return sum;
 
-      // ถ้าเป็น Member และมีเซลล์ ให้ใช้ member_price คูณจำนวนคน
       if (b.customer_type === 'member' && b.sales_name) {
         return sum + ((ev.member_price || 0) * b.guests_count);
       }
       
-      // ถ้าปกติให้ใช้ราคาเหมาต่อโต๊ะ
       return sum + (ev.price || 0);
     }, 0);
   }, [eventsMap, bookings]);
@@ -878,7 +884,7 @@ export default function MonitorPage() {
         <div className="mt-6 flex flex-col gap-3 lg:flex-row justify-between items-stretch lg:items-center">
           <div className="flex flex-1 items-center gap-2.5 rounded-xl px-4 h-11 bg-black/20 border" style={{ borderColor: THEME.border }}>
             <Search size={18} style={{ color: THEME.muted }} />
-            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า / รหัสจอง / เซลล์ / เบอร์โทร..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600 text-white" />
+            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ค้นหาชื่อลูกค้า / รหัสจอง / เซลล์ / เบอร์โทร / รหัสโค้ด..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600 text-white" />
           </div>
           <div className="flex gap-3 flex-wrap items-center">
             <div className="bg-black/40 border p-1 rounded-xl flex items-center gap-1 h-11" style={{ borderColor: THEME.border }}>
@@ -950,7 +956,7 @@ export default function MonitorPage() {
                           <BookingCard 
                             key={b.id} 
                             booking={b} 
-                            eventsMap={eventsMap} // 🟢 ส่ง eventsMap ให้ BookingCard เพื่อให้มันคำนวณตาม Logic ใหม่ได้
+                            eventsMap={eventsMap}
                             onUpdateStatus={handleUpdateStatus}
                             onViewSlip={(bookingData) => setSelectedBookingForSlip(bookingData)}
                             role={role}
@@ -1099,7 +1105,6 @@ export default function MonitorPage() {
                   <div className="border-t border-slate-800/80 pt-3 mt-1 flex justify-between items-center bg-amber-500/5 -mx-4 px-4 pb-1">
                     <span className="text-amber-500/80 text-xs font-bold">ราคาสรุปสุทธิ (ใบนี้):</span> 
                     <span className="font-black text-amber-400 text-base">
-                      {/* 🔴 Logic ใหม่: ถ้าเป็น Member ภายใต้เซลล์ คิดตามจำนวนคน! */}
                       {selectedBookingForSlip.customer_type === 'member' && selectedBookingForSlip.sales_name
                         ? ((eventsMap[selectedBookingForSlip.booking_date]?.member_price || 0) * selectedBookingForSlip.guests_count).toLocaleString()
                         : (eventsMap[selectedBookingForSlip.booking_date]?.price || 0).toLocaleString()} ฿
