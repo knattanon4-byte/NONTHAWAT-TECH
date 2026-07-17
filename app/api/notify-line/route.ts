@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-// 🟢 ฝัง Token และ Room ID ของบอสตรงๆ (เช็คลบช่องว่างออกให้แล้วครับ)
 const LINE_CHANNEL_ACCESS_TOKEN = 'lQyjTwldONqWljwu0zm0bXX7O/+rNwzBtbHqZyAjMP+aTv4YL+d3+mMGBC82pmnj8yI9aAz98Y3CqJXNzvJtsAwpQTXNR1MrVa0sUBL+3YPOiguyI7g/auod4mYoQfyl1R/Yz9rsKbvbZVSkAlUtsQdB04t89/1O/w1cDnyilFU='; 
 const LINE_TARGET_ID = 'Ccbf8a8d104dd53e7cfc08e98d48caf2f'; 
 
@@ -8,7 +7,6 @@ export async function POST(request: Request) {
   try {
     const { message, imageUrl } = await request.json();
 
-    // 1. เตรียมก้อนข้อความสรุปยอดจอง
     const messagesPayload: any[] = [
       {
         type: 'text',
@@ -16,7 +14,6 @@ export async function POST(request: Request) {
       },
     ];
 
-    // 2. ถ้าระบบส่งรูปลิงก์สลิปมาด้วย ให้ยัดลงไปเป็นรูปภาพเลย
     if (imageUrl) {
       messagesPayload.push({
         type: 'image',
@@ -25,7 +22,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // 3. ยิงคำสั่งไปที่ LINE Messaging API ทันที
+    // 🟢 ใช้ Push API เหมือนเดิม (ถูกต้องที่สุดสำหรับการยิงจากหน้าเว็บ)
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
       headers: {
@@ -38,7 +35,6 @@ export async function POST(request: Request) {
       }),
     });
 
-    // 🟢 บล็อกนี้จะทำหน้าที่ดักจับ Error และพ่นคำด่าจาก LINE ออกมาใน Terminal
     if (!response.ok) {
       const errorData = await response.json();
       console.error('👉 LINE Response Status:', response.status); 
