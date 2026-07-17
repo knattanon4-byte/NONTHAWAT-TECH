@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-// 🟢 ฝัง Token และ Room ID ของบอสตรงๆ ตามคำสั่งครับ
-const LINE_CHANNEL_ACCESS_TOKEN = 'lQyjTwldONqWljwu0zm0bXX7O/+rNwzBtbHqZyAjMP+aTv4YL+d3+mMGBC82pmnj8yI9aAz98Y3CqJXNzvJtsA wpQTXNR1MrVa0sUBL+3YPOiguyI7g/auod4mYoQfyl1R/Yz9rsKbvbZVSkAlUtsQdB04t89/1O/w1cDnyilFU='; 
+// 🟢 ฝัง Token และ Room ID ของบอสตรงๆ (เช็คลบช่องว่างออกให้แล้วครับ)
+const LINE_CHANNEL_ACCESS_TOKEN = 'lQyjTwldONqWljwu0zm0bXX7O/+rNwzBtbHqZyAjMP+aTv4YL+d3+mMGBC82pmnj8yI9aAz98Y3CqJXNzvJtsAwpQTXNR1MrVa0sUBL+3YPOiguyI7g/auod4mYoQfyl1R/Yz9rsKbvbZVSkAlUtsQdB04t89/1O/w1cDnyilFU='; 
 const LINE_TARGET_ID = 'Ccbf8a8d104dd53e7cfc08e98d48caf2f'; 
 
 export async function POST(request: Request) {
@@ -38,10 +38,12 @@ export async function POST(request: Request) {
       }),
     });
 
+    // 🟢 บล็อกนี้จะทำหน้าที่ดักจับ Error และพ่นคำด่าจาก LINE ออกมาใน Terminal
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('🚨 LINE API Error:', errorData);
-      return NextResponse.json({ success: false, error: errorData }, { status: 400 });
+      console.error('👉 LINE Response Status:', response.status); 
+      console.error('🚨 LINE API Error Details:', JSON.stringify(errorData, null, 2)); 
+      return NextResponse.json({ success: false, error: errorData }, { status: response.status });
     }
 
     return NextResponse.json({ success: true, message: 'ส่งแจ้งเตือนและรูปสลิปเข้า LINE เรียบร้อย!' });
