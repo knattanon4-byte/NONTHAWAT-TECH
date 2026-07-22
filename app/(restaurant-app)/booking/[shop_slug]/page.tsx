@@ -420,6 +420,9 @@ export default function BookingPage() {
     if (bookingDate) fetchTodayBookings(bookingDate);
   };
 
+  // 🟢 คำนวณว่าวันนี้ควรแสดงผังอะไร โดยอ่านจาก eventsMap
+  const currentEventLayout = eventsMap[bookingDate]?.layout_type || 'PlanA';
+
   if (!shopExists) { return notFound(); }
   const isPendingPayment = successData?.[0]?.status === 'pending';
 
@@ -529,7 +532,13 @@ export default function BookingPage() {
                       <span className="text-pink-400 text-sm ml-1">(เลือกได้สูงสุด {Math.floor(guestsCount / 4) || 1} โต๊ะ)</span>
                     </label>
                     <div className="w-full rounded-2xl bg-black/40 p-1 border box-sizing-border overflow-x-auto relative min-h-[240px] flex items-center justify-center transition-all duration-300" style={{ borderColor: THEME.border }}>
-                      <FloorPlan selectedTables={selectedTables} setSelectedTables={setSelectedTables} dayTables={dayTables} />
+                      {/* 🟢 ส่ง Prop currentLayout เข้า FloorPlan เพื่อให้หน้าบ้านแสดงผังที่ถูกต้องเสมอ */}
+                      <FloorPlan 
+                        selectedTables={selectedTables} 
+                        setSelectedTables={setSelectedTables} 
+                        dayTables={dayTables} 
+                        currentLayout={currentEventLayout} 
+                      />
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5 mt-4 text-xs sm:text-sm font-medium text-slate-300 w-full">
                       <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-emerald-500 border border-emerald-700"></span> ว่าง</div>

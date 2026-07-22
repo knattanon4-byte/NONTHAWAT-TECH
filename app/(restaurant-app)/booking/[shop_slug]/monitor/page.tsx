@@ -131,6 +131,19 @@ export default function MonitorPage() {
     setAppNotice({ isOpen: true, type, title, message });
   };
 
+  // 🌟 [ใหม่] Global Confirmation Modal State แบบล้ำๆ 🌟
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string | React.ReactNode;
+    onConfirm: () => void;
+    isDanger?: boolean;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
+  const requestConfirm = (title: string, message: string | React.ReactNode, onConfirm: () => void, isDanger = true) => {
+    setConfirmDialog({ isOpen: true, title, message, onConfirm, isDanger });
+  };
+
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportForm, setReportForm] = useState({ issueType: 'ระบบจองขัดข้อง', details: '' });
   const [isSendingReport, setIsSendingReport] = useState(false);
@@ -140,6 +153,7 @@ export default function MonitorPage() {
   const [eventStatusMsg, setEventStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [eventDate, setEventDate] = useState('');
   const [eventType, setEventType] = useState<'normal' | 'concert' | 'party' | 'closed'>('normal');
+  const [eventLayout, setEventLayout] = useState<'PlanA' | 'PlanB'>('PlanA');
   const [eventTitle, setEventTitle] = useState('');
   const [eventPrice, setEventPrice] = useState(5000);
   const [eventMemberPrice, setEventMemberPrice] = useState(4000); 
@@ -239,13 +253,20 @@ export default function MonitorPage() {
     } finally { setIsMemberLoading(false); }
   };
 
-  const handleDeleteMember = async (id: string) => {
-    if (!window.confirm('ยืนยันการลบรหัสนี้ใช่หรือไม่?')) return;
-    try {
-      await supabase.from('shop_members').delete().eq('id', id);
-      await loadMembers();
-      triggerNotice('success', 'ลบรหัสสำเร็จ', 'รหัสนี้จะไม่สามารถใช้เข้าระบบได้อีกต่อไป');
-    } catch (err) { triggerNotice('error', 'ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
+  const handleDeleteMember = (id: string) => {
+    // 🌟 เปลี่ยนมาใช้ Pop-up ตัวใหม่ 🌟
+    requestConfirm(
+      'ยืนยันลบสิทธิ์ VIP / Member',
+      'คุณต้องการลบรหัสนี้ออกจากระบบใช่หรือไม่? เมื่อลบแล้วสิทธิ์นี้จะไม่สามารถใช้ลดราคาได้อีกต่อไป',
+      async () => {
+        try {
+          await supabase.from('shop_members').delete().eq('id', id);
+          await loadMembers();
+          triggerNotice('success', 'ลบรหัสสำเร็จ', 'รหัสนี้ถูกลบออกจากระบบเรียบร้อยแล้ว');
+        } catch (err) { triggerNotice('error', 'ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
+      },
+      true
+    );
   };
 
   const filteredMembersList = useMemo(() => {
@@ -272,13 +293,20 @@ export default function MonitorPage() {
     } finally { setIsSalesLoading(false); }
   };
 
-  const handleDeleteSale = async (id: string) => {
-    if (!window.confirm('ยืนยันการลบรายชื่อเซลล์นี้ใช่หรือไม่?')) return;
-    try {
-      await supabase.from('shop_sales').delete().eq('id', id);
-      await loadSales();
-      triggerNotice('success', 'ลบรายชื่อสำเร็จ', 'ลบเซลล์ออกจากระบบเรียบร้อยแล้ว');
-    } catch (err) { triggerNotice('error', 'ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
+  const handleDeleteSale = (id: string) => {
+    // 🌟 เปลี่ยนมาใช้ Pop-up ตัวใหม่ 🌟
+    requestConfirm(
+      'ยืนยันลบรายชื่อเซลล์',
+      'คุณต้องการลบรายชื่อเซลล์ผู้ดูแลนี้ออกจากระบบใช่หรือไม่?',
+      async () => {
+        try {
+          await supabase.from('shop_sales').delete().eq('id', id);
+          await loadSales();
+          triggerNotice('success', 'ลบรายชื่อสำเร็จ', 'ลบเซลล์ออกจากระบบเรียบร้อยแล้ว');
+        } catch (err) { triggerNotice('error', 'ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
+      },
+      true
+    );
   };
 
   const filteredSalesList = useMemo(() => {
@@ -316,6 +344,7 @@ export default function MonitorPage() {
     if (eventDate && eventsMap[eventDate]) {
       const ev = eventsMap[eventDate];
       setEventType(ev.event_type || 'normal');
+      setEventLayout(ev.layout_type || 'PlanA'); 
       setEventTitle(ev.title || '');
       setEventPrice(ev.price || 0);
       setEventMemberPrice(ev.member_price || 0); 
@@ -326,6 +355,7 @@ export default function MonitorPage() {
       setImageFile(null); 
     } else {
       setEventType('normal');
+      setEventLayout('PlanA'); 
       setEventTitle('');
       setEventPrice(5000);
       setEventMemberPrice(4000);
@@ -690,6 +720,7 @@ export default function MonitorPage() {
         shop_id: shopSlug,
         event_date: eventDate,
         event_type: eventType,
+        layout_type: eventLayout,
         title: (eventType === 'concert' || eventType === 'party') ? eventTitle : eventType === 'closed' ? 'วันหยุดร้าน' : 'วันบริการปกติ',
         price: eventType === 'concert' ? eventPrice : 0, 
         member_price: eventType === 'concert' ? eventMemberPrice : 0, 
@@ -706,17 +737,29 @@ export default function MonitorPage() {
     } catch (err: any) { console.error(err); setEventStatusMsg({ type: 'error', text: err.message || 'ระบบบันทึกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' }); } finally { setEventLoading(false); }
   };
 
-  const handleCancelConcert = async () => {
+  const handleCancelConcert = () => {
     if (!eventDate) { setEventStatusMsg({ type: 'error', text: 'กรุณาเลือกวันที่ต้องการยกเลิกบนปฏิทินก่อนครับ' }); return; }
-    const isConfirm = window.confirm(`ยืนยันการลบ/ยกเลิกการตั้งค่างานวันที่ ${eventDate} ใช่หรือไม่?`);
-    if (!isConfirm) return;
-    setEventLoading(true); setEventStatusMsg(null);
-    try {
-      const { error } = await supabase.from('shop_events').delete().eq('shop_id', shopSlug).eq('event_date', eventDate);
-      if (error) throw error;
-      setEventStatusMsg({ type: 'success', text: `🗑️ เคลียร์ข้อมูลงานวันที่ ${eventDate} เรียบร้อยแล้ว` });
-      await loadEventsData(); 
-    } catch (err: any) { console.error(err); setEventStatusMsg({ type: 'error', text: err.message || 'ระบบยกเลิกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' }); } finally { setEventLoading(false); }
+    
+    // 🌟 เปลี่ยนมาใช้ Pop-up ตัวใหม่ 🌟
+    requestConfirm(
+      'ยืนยันการยกเลิกตั้งค่างาน',
+      <>คุณต้องการลบหรือยกเลิกการตั้งค่างานของวันที่ <span className="text-pink-400 font-bold underline">{eventDate}</span> ใช่หรือไม่?<br/><span className="text-[11px] text-red-400/80 mt-1 block">หากยืนยัน วันนี้จะถูกเปลี่ยนกลับเป็นวันเปิดบริการปกติทันที</span></>,
+      async () => {
+        setEventLoading(true); setEventStatusMsg(null);
+        try {
+          const { error } = await supabase.from('shop_events').delete().eq('shop_id', shopSlug).eq('event_date', eventDate);
+          if (error) throw error;
+          setEventStatusMsg({ type: 'success', text: `🗑️ เคลียร์ข้อมูลงานวันที่ ${eventDate} เรียบร้อยแล้ว` });
+          await loadEventsData(); 
+        } catch (err: any) { 
+          console.error(err); 
+          setEventStatusMsg({ type: 'error', text: err.message || 'ระบบยกเลิกข้อมูลขัดข้อง กรุณาลองใหม่อีกครั้ง' }); 
+        } finally { 
+          setEventLoading(false); 
+        }
+      },
+      true // ส่ง true เพื่อให้ปุ่มเป็นสีแดง (Danger)
+    );
   };
 
   const handleSendReport = async (e: React.FormEvent) => {
@@ -801,6 +844,8 @@ export default function MonitorPage() {
     const found = membersList.find(m => m.member_code?.trim().toUpperCase() === adminForm.memberCode.trim().toUpperCase());
     return found ? (found.role_type || 'member') : 'normal';
   }, [adminForm.memberCode, membersList]);
+
+  const activeAdminLayout = eventsMap[adminSelectedDate]?.layout_type || 'PlanA';
 
   if (!shopExists) return notFound();
   if (authLoading) return ( <div className="min-h-screen flex items-center justify-center font-sans" style={{ backgroundColor: THEME.bg }}> <div className="text-center space-y-3"> <Loader2 size={36} className="animate-spin mx-auto" style={{ color: THEME.pink }} /> <p className="text-sm font-medium" style={{ color: THEME.muted }}>กำลังตรวจสอบสิทธิ์การเข้าถึงระบบควบคุม...</p> </div> </div> );
@@ -965,6 +1010,7 @@ export default function MonitorPage() {
                             onUpdateStatus={handleUpdateStatus}
                             onViewSlip={(bookingData) => setSelectedBookingForSlip(bookingData)}
                             role={role}
+                            requestConfirm={requestConfirm} // 🌟 โยนฟังก์ชันยืนยันไปให้ Card ด้วย
                           />
                         ))}
                       </div>
@@ -1001,6 +1047,7 @@ export default function MonitorPage() {
                   selectedTables={adminSelectedTables} 
                   onTableClick={handleAdminLockTableClick}
                   dayTables={adminDayTablesMap}
+                  currentLayout={activeAdminLayout} 
                 />
                 
                 <AnimatePresence>
@@ -1024,6 +1071,49 @@ export default function MonitorPage() {
           )}
         </main>
       </div>
+
+      {/* 🌟 [ใหม่] GLOBAL CONFIRMATION MODAL (แทนที่ window.confirm ทั้งหมด) 🌟 */}
+      <AnimatePresence>
+        {confirmDialog.isOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] overflow-y-auto">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className={`w-full max-w-sm rounded-3xl border p-6 text-center shadow-[0_0_50px_rgba(0,0,0,0.6)] my-8 bg-[#16161E] ${confirmDialog.isDanger ? 'border-red-500/30' : 'border-amber-500/30'}`} 
+            >
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 border shadow-inner ${confirmDialog.isDanger ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-amber-500/10 border-amber-500/20 text-amber-500'}`}>
+                <AlertTriangle size={32} className={confirmDialog.isDanger ? "animate-pulse" : ""} />
+              </div>
+              <div className="space-y-3">
+                <h3 className="text-xl font-bold text-white tracking-wide">{confirmDialog.title}</h3>
+                <div className="text-sm text-gray-400 leading-relaxed px-2">
+                  {confirmDialog.message}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-6 mt-2 border-t border-slate-800">
+                <button 
+                  type="button" 
+                  onClick={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} 
+                  className="flex-1 h-12 rounded-xl border border-slate-700 hover:bg-white/5 text-white text-sm font-bold transition-colors active:scale-95"
+                >
+                  ย้อนกลับ
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setConfirmDialog({ ...confirmDialog, isOpen: false });
+                    confirmDialog.onConfirm();
+                  }} 
+                  className={`flex-1 h-12 rounded-xl text-white font-extrabold text-sm flex items-center justify-center gap-1.5 transition-colors active:scale-95 ${confirmDialog.isDanger ? 'bg-red-500 hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-amber-500 hover:bg-amber-600 text-black shadow-[0_0_15px_rgba(245,158,11,0.4)]'}`}
+                >
+                  {confirmDialog.isDanger ? <><Trash2 size={16} /> ยืนยันข้อมูล</> : <><Check size={16} /> ตกลง</>}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {selectedBookingForSlip && (
@@ -1125,10 +1215,16 @@ export default function MonitorPage() {
                       <button 
                         type="button" 
                         onClick={() => {
-                          if(window.confirm('คุณต้องการปฏิเสธคิวและล้างโต๊ะนี้ให้ว่างใช่หรือไม่?')) {
-                            handleUpdateStatus(selectedBookingForSlip.id, 'no_show');
-                            setSelectedBookingForSlip(null);
-                          }
+                          // 🌟 เปลี่ยนมาใช้ Pop-up ตัวใหม่ 🌟
+                          requestConfirm(
+                            'ปฏิเสธคิวและล้างโต๊ะ',
+                            <>คุณต้องการปฏิเสธคิวจองของ <span className="font-bold text-white">{selectedBookingForSlip.customer_name}</span> ใช่หรือไม่?<br/><span className="text-red-400 text-[11px] block mt-1">โต๊ะหมายเลข {selectedBookingForSlip.table_number} จะกลับมาสถานะว่างทันที</span></>,
+                            () => {
+                              handleUpdateStatus(selectedBookingForSlip.id, 'no_show');
+                              setSelectedBookingForSlip(null);
+                            },
+                            true
+                          );
                         }}
                         className="py-3 rounded-xl text-xs font-bold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors"
                       >
@@ -1520,7 +1616,7 @@ export default function MonitorPage() {
             </div>
             <form onSubmit={handleCreateEventSubmit} className="space-y-5 text-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-                <div className="flex flex-col justify-center h-full"> {/* 🟢 ปรับให้ปฏิทินอยู่กึ่งกลางระดับสายตา */}
+                <div className="flex flex-col justify-center h-full"> 
                   <div className="space-y-3 p-4 bg-black/30 rounded-2xl border shadow-lg" style={{ borderColor: THEME.border }}>
                     <div className="flex items-center justify-between px-1">
                       <span className="font-bold text-sm text-white">{monthNames[viewMonth]} {viewYear + 543}</span>
@@ -1569,6 +1665,16 @@ export default function MonitorPage() {
                       <button type="button" onClick={() => { setEventType('closed'); }} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventType === 'closed' ? '#EF4444' : 'transparent', color: 'white' }}>หยุด</button>
                     </div>
                   </div>
+
+                  {eventType !== 'closed' && (
+                    <div className="animate-fade-in">
+                      <label className="block text-xs font-mono mb-1.5 uppercase tracking-wider text-slate-300">ผังร้าน (Floor Plan)</label>
+                      <div className="grid grid-cols-2 gap-1.5 bg-black/30 p-1 rounded-xl border h-11 items-center" style={{ borderColor: THEME.border }}>
+                        <button type="button" onClick={() => setEventLayout('PlanA')} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventLayout === 'PlanA' ? THEME.mint : 'transparent', color: eventLayout === 'PlanA' ? 'black' : 'white' }}>Plan A (ปกติ)</button>
+                        <button type="button" onClick={() => setEventLayout('PlanB')} className="h-8 rounded-lg font-bold text-[11px] transition-all" style={{ backgroundColor: eventLayout === 'PlanB' ? THEME.mint : 'transparent', color: eventLayout === 'PlanB' ? 'black' : 'white' }}>Plan B (ผังใหม่)</button>
+                      </div>
+                    </div>
+                  )}
                   
                   {eventType === 'closed' && (
                     <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs leading-relaxed animate-fade-in">
@@ -1620,7 +1726,6 @@ export default function MonitorPage() {
                               </div>
                             </div>
                             
-                            {/* 🟢 ย้ายเวลาปิดรับจองออนไลน์มาอยู่คู่กับราคา Member ตรงนี้ */}
                             <div className="grid grid-cols-2 gap-4">
                               <div>
                                 <label className="block text-xs font-semibold mb-1.5 text-purple-400">ราคา Member (/คน)</label>
@@ -1734,13 +1839,15 @@ function BookingCard({
   eventsMap,
   onUpdateStatus,
   onViewSlip,
-  role 
+  role,
+  requestConfirm // 🌟 รับฟังก์ชัน Request ยืนยันจากหน้าหลักมาใช้งาน
 }: { 
   booking: any;
   eventsMap: Record<string, any>;
   onUpdateStatus: (id: string, nextStatus: 'confirmed' | 'checked_in' | 'no_show') => Promise<void>;
   onViewSlip: (b: any) => void;
   role: UserRole;
+  requestConfirm: (title: string, message: React.ReactNode, onConfirm: () => void, isDanger?: boolean) => void;
 }) {
   const zone = zoneOf(booking.table_number);
   const derived = deriveStatus(booking);
@@ -1805,7 +1912,21 @@ function BookingCard({
                 <button type="button" onClick={() => onUpdateStatus(booking.id, 'checked_in')} className="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black text-emerald-400"><Check size={14} />เช็คอินเข้าร้าน</button>
               )}
               {role === 'owner' && (
-                <button type="button" onClick={() => onUpdateStatus(booking.id, 'no_show')} className="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400"><X size={14} />No Show / ยกเลิกคิว</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                     // 🌟 ใช้ Pop-up ใหม่แทน window.confirm
+                     requestConfirm(
+                       'ยืนยันยกเลิกคิว (No Show)',
+                       <>คุณต้องการเคลียร์โต๊ะ <span className="font-bold text-white">{booking.table_number}</span> ของ <span className="font-bold text-white">{booking.customer_name}</span> ใช่หรือไม่?<br/><span className="text-red-400 text-[11px] block mt-1">คิวนี้จะถูกทำเครื่องหมายว่าไม่มาและเปลี่ยนโต๊ะเป็นสถานะว่างทันที</span></>,
+                       () => onUpdateStatus(booking.id, 'no_show'),
+                       true
+                     );
+                  }} 
+                  className="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400"
+                >
+                  <X size={14} />No Show
+                </button>
               )}
               {role === 'sale' && (
                 <button type="button" onClick={() => onViewSlip(booking)} className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 bg-black/20 hover:bg-white/10 text-gray-400 border border-slate-800"><Eye size={14} />รายละเอียด</button>
