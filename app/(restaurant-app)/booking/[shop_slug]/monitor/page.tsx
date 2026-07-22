@@ -21,7 +21,7 @@ import {
   Briefcase,
   Ticket,
   ChevronLeft, 
-  QrCode,      
+  QrCode,     
   type LucideIcon,
 } from 'lucide-react';
 import FloorPlan from '@/components/booking/FloorPlan'; 
@@ -144,6 +144,7 @@ export default function MonitorPage() {
   const [eventPrice, setEventPrice] = useState(5000);
   const [eventMemberPrice, setEventMemberPrice] = useState(4000); 
   const [eventExtraPrice, setEventExtraPrice] = useState(0);
+  const [eventCutoffTime, setEventCutoffTime] = useState('19:00');
 
   const [perksNote, setPerksNote] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -319,6 +320,7 @@ export default function MonitorPage() {
       setEventPrice(ev.price || 0);
       setEventMemberPrice(ev.member_price || 0); 
       setEventExtraPrice(ev.extra_price_per_head || 0); 
+      setEventCutoffTime(ev.booking_cutoff_time ? ev.booking_cutoff_time.substring(0, 5) : '19:00');
       setPerksNote(ev.perks_note || '');
       setImagePreview(ev.image_url || null);
       setImageFile(null); 
@@ -328,6 +330,7 @@ export default function MonitorPage() {
       setEventPrice(5000);
       setEventMemberPrice(4000);
       setEventExtraPrice(0); 
+      setEventCutoffTime('19:00');
       setPerksNote('');
       setImagePreview(null);
       setImageFile(null);
@@ -691,6 +694,7 @@ export default function MonitorPage() {
         price: eventType === 'concert' ? eventPrice : 0, 
         member_price: eventType === 'concert' ? eventMemberPrice : 0, 
         extra_price_per_head: eventType === 'concert' ? eventExtraPrice : 0, 
+        booking_cutoff_time: (eventType === 'concert' || eventType === 'party') ? eventCutoffTime : '19:00',
         perks_note: (eventType === 'concert' || eventType === 'party') ? perksNote : eventType === 'closed' ? 'ปิดรับจองออนไลน์ วันหยุดทำการ' : 'จองฟรี ไม่มีค่าบริการ',
         image_url: (eventType === 'concert' || eventType === 'party') ? uploadedImageUrl : null,
       };
@@ -1515,43 +1519,45 @@ export default function MonitorPage() {
               <button onClick={() => { setIsEventModalOpen(false); }} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
             </div>
             <form onSubmit={handleCreateEventSubmit} className="space-y-5 text-sm">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                <div className="space-y-3 p-3 bg-black/30 rounded-2xl border" style={{ borderColor: THEME.border }}>
-                  <div className="flex items-center justify-between px-1">
-                    <span className="font-bold text-sm text-white">{monthNames[viewMonth]} {viewYear + 543}</span>
-                    <div className="flex gap-1">
-                      <button type="button" onClick={() => { if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); } else { setViewMonth(viewMonth - 1); } }} className="p-1 text-xs font-bold text-slate-400 hover:text-white border border-slate-800 rounded bg-black/20">◀</button>
-                      <button type="button" onClick={() => { if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); } else { setViewMonth(viewMonth + 1); } }} className="p-1 text-xs font-bold text-slate-400 hover:text-white border border-slate-800 rounded bg-black/20">▶</button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+                <div className="flex flex-col justify-center h-full"> {/* 🟢 ปรับให้ปฏิทินอยู่กึ่งกลางระดับสายตา */}
+                  <div className="space-y-3 p-4 bg-black/30 rounded-2xl border shadow-lg" style={{ borderColor: THEME.border }}>
+                    <div className="flex items-center justify-between px-1">
+                      <span className="font-bold text-sm text-white">{monthNames[viewMonth]} {viewYear + 543}</span>
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => { if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); } else { setViewMonth(viewMonth - 1); } }} className="p-1 text-xs font-bold text-slate-400 hover:text-white border border-slate-800 rounded bg-black/20">◀</button>
+                        <button type="button" onClick={() => { if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); } else { setViewMonth(viewMonth + 1); } }} className="p-1 text-xs font-bold text-slate-400 hover:text-white border border-slate-800 rounded bg-black/20">▶</button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 text-center font-bold text-[11px] text-slate-400">{['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => <div key={d}>{d}</div>)}</div>
-                  <div className="grid grid-cols-7 gap-1 text-center font-mono">
-                    {calendarDays.map((day, idx) => {
-                      if (!day) return <div key={`empty-${idx}`} />;
-                      const checkDateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                      const isSelected = eventDate === checkDateStr;
-                      const ev = eventsMap[checkDateStr];
-                      const isClosed = ev?.event_type === 'closed';
-                      const isConcert = ev?.event_type === 'concert';
-                      const isParty = ev?.event_type === 'party';
+                    <div className="grid grid-cols-7 gap-1 text-center font-bold text-[11px] text-slate-400">{['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => <div key={d}>{d}</div>)}</div>
+                    <div className="grid grid-cols-7 gap-1 text-center font-mono">
+                      {calendarDays.map((day, idx) => {
+                        if (!day) return <div key={`empty-${idx}`} />;
+                        const checkDateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        const isSelected = eventDate === checkDateStr;
+                        const ev = eventsMap[checkDateStr];
+                        const isClosed = ev?.event_type === 'closed';
+                        const isConcert = ev?.event_type === 'concert';
+                        const isParty = ev?.event_type === 'party';
 
-                      return (
-                        <button
-                          key={`day-${day}`} type="button" onClick={() => selectDateHandler(day)}
-                          className={`h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center relative ${isSelected ? 'shadow-md' : 'hover:bg-white/10 border border-transparent'}`}
-                          style={{ 
-                            backgroundColor: isSelected ? (isClosed ? '#EF4444' : isParty ? THEME.gold : THEME.pink) : (isClosed ? 'rgba(239,68,68,0.2)' : ''), 
-                            color: isClosed && !isSelected ? '#EF4444' : 'white'
-                          }}
-                        >
-                          {day}
-                          {isConcert && !isSelected && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-pink-500"></span>}
-                          {isParty && !isSelected && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
-                        </button>
-                      );
-                    })}
+                        return (
+                          <button
+                            key={`day-${day}`} type="button" onClick={() => selectDateHandler(day)}
+                            className={`h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center relative ${isSelected ? 'shadow-md' : 'hover:bg-white/10 border border-transparent'}`}
+                            style={{ 
+                              backgroundColor: isSelected ? (isClosed ? '#EF4444' : isParty ? THEME.gold : THEME.pink) : (isClosed ? 'rgba(239,68,68,0.2)' : ''), 
+                              color: isClosed && !isSelected ? '#EF4444' : 'white'
+                            }}
+                          >
+                            {day}
+                            {isConcert && !isSelected && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-pink-500"></span>}
+                            {isParty && !isSelected && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-2 text-center border-t pt-2 text-xs font-medium text-slate-400" style={{ borderColor: THEME.border }}>วันที่เลือก: {eventDate ? <span className="text-white font-bold underline font-mono">{eventDate}</span> : <span className="text-amber-400">กรุณาคลิกเลือกบนปฏิทิน</span>}</div>
                   </div>
-                  <div className="mt-2 text-center border-t pt-2 text-xs font-medium text-slate-400" style={{ borderColor: THEME.border }}>วันที่เลือก: {eventDate ? <span className="text-white font-bold underline font-mono">{eventDate}</span> : <span className="text-amber-400">กรุณาคลิกเลือกบนปฏิทิน</span>}</div>
                 </div>
                 <div className="space-y-4">
                   <div>
@@ -1572,7 +1578,7 @@ export default function MonitorPage() {
                   )}
 
                   {(eventType === 'concert' || eventType === 'party') && (
-                    <div className="space-y-4 pt-1 animate-fade-in">
+                    <div className="space-y-5 pt-1 animate-fade-in">
                       <div className="grid grid-cols-1 gap-3">
                         <div>
                           <label className="block text-xs font-semibold mb-1 text-gray-300">
@@ -1582,7 +1588,7 @@ export default function MonitorPage() {
                         </div>
                         
                         {eventType === 'concert' && (
-                          <div className="space-y-5 pt-1 animate-fade-in">
+                          <div className="space-y-4 pt-1 animate-fade-in">
                             <div className="grid grid-cols-2 gap-4">
                               <div>
                                 <label className="block text-xs font-semibold mb-1.5 text-gray-300">ราคาปกติ (/โต๊ะ)</label>
@@ -1613,20 +1619,39 @@ export default function MonitorPage() {
                                 </div>
                               </div>
                             </div>
-                            <div>
-                              <label className="block text-xs font-semibold mb-1.5 text-purple-400">ราคา Member (/คน)</label>
-                              <div className="relative flex items-center">
-                                <Crown size={14} className="absolute left-3 text-purple-400" />
-                                <input 
-                                  type="number" 
-                                  value={eventMemberPrice} 
-                                  onChange={(e) => setEventMemberPrice(Number(e.target.value))} 
-                                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} 
-                                  className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-purple-300 outline-none focus:border-purple-500 font-mono text-sm" 
-                                  style={{ borderColor: THEME.border }} 
-                                />
+                            
+                            {/* 🟢 ย้ายเวลาปิดรับจองออนไลน์มาอยู่คู่กับราคา Member ตรงนี้ */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-purple-400">ราคา Member (/คน)</label>
+                                <div className="relative flex items-center">
+                                  <Crown size={14} className="absolute left-3 text-purple-400" />
+                                  <input 
+                                    type="number" 
+                                    value={eventMemberPrice} 
+                                    onChange={(e) => setEventMemberPrice(Number(e.target.value))} 
+                                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} 
+                                    className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-purple-300 outline-none focus:border-purple-500 font-mono text-sm" 
+                                    style={{ borderColor: THEME.border }} 
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-red-400">เวลาปิดรับจองออนไลน์</label>
+                                <div className="relative flex items-center">
+                                  <Clock size={14} className="absolute left-3 text-red-400" />
+                                  <input 
+                                    type="time" 
+                                    value={eventCutoffTime} 
+                                    onChange={(e) => setEventCutoffTime(e.target.value)} 
+                                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} 
+                                    className="w-full bg-black/20 border rounded-xl pl-9 pr-4 h-11 text-red-300 outline-none focus:border-red-500 font-mono text-sm custom-time-input" 
+                                    style={{ borderColor: THEME.border }} 
+                                  />
+                                </div>
                               </div>
                             </div>
+
                             <div className="pt-2">
                               <label className="block text-xs font-semibold mb-1.5 text-gray-300 flex items-center gap-1">
                                 <FileText size={13} /> รายละเอียดของแถม/กิจกรรม
@@ -1689,6 +1714,7 @@ export default function MonitorPage() {
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.1); border-radius: 10px; }
+        .custom-time-input::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
       `}</style>
     </div>
   );

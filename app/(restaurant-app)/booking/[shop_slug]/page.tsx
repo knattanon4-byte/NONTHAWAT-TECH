@@ -89,21 +89,32 @@ export default function BookingPage() {
   }, []);
 
   const todayStr = getBKKDate(0);
-  const maxDateStr = getBKKDate(15);
 
   const handleDateSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.value;
     if (!selected) { setBookingDate(''); return; }
-    if (eventsMap[selected]?.event_type === 'closed') {
+    
+    const eventData = eventsMap[selected];
+    
+    if (eventData?.event_type === 'closed') {
       triggerError('ขออภัยครับ ทางร้านหยุดให้บริการในวันที่ท่านเลือก กรุณาเลือกวันอื่นครับ');
       setBookingDate(''); 
       return;
     }
+    
+    // Check cutoff time for today's booking
     if (selected === todayStr) {
-      const currentHourStr = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Bangkok', hour12: false, hour: 'numeric' });
-      const currentHour = parseInt(currentHourStr, 10);
-      if (currentHour >= 19) {
-        triggerError('ไม่สามารถจองในเวลาดังกล่าวได้ ติดต่อทางร้านเพื่อทำการจองคิว');
+      const now = new Date();
+      // Format current BKK time to HH:mm (e.g., "19:05")
+      const currentBkkTimeStr = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
+      
+      let cutoffTime = '19:00'; // Default cutoff
+      if (eventData && eventData.booking_cutoff_time) {
+        cutoffTime = eventData.booking_cutoff_time.substring(0, 5); // Extract HH:mm from '20:00:00'
+      }
+
+      if (currentBkkTimeStr >= cutoffTime) {
+        triggerError(`ไม่สามารถจองคิวออนไลน์ของวันนี้ได้แล้วครับ (ระบบปิดรับจองตอน ${cutoffTime} น.) กรุณาติดต่อสอบถามผ่านไลน์ของทางร้านครับ`);
         setBookingDate(''); 
         return;
       }
@@ -460,7 +471,7 @@ export default function BookingPage() {
                     <Calendar size={18} /> 1. เลือกวันที่ต้องการจอง
                   </label>
                   <div className="relative flex items-center rounded-xl border bg-black/40 w-full h-14 transition-all duration-300 focus-within:border-amber-400" style={{ borderColor: THEME.border, boxShadow: bookingDate && (eventsMap[bookingDate]?.event_type === 'concert' || eventsMap[bookingDate]?.event_type === 'party') ? `0 0 15px ${THEME.pink}40` : 'none' }}>
-                    <input type="date" required min={todayStr} max={maxDateStr} value={bookingDate} onChange={handleDateSelection} className="w-full h-full appearance-none bg-transparent px-4 text-white outline-none text-lg color-scheme-dark block min-w-0 box-border iOS-date-input" />
+                    <input type="date" required min={todayStr} value={bookingDate} onChange={handleDateSelection} className="w-full h-full appearance-none bg-transparent px-4 text-white outline-none text-lg color-scheme-dark block min-w-0 box-border iOS-date-input" />
                   </div>
                   <AnimatePresence>
                     {bookingDate && (eventsMap[bookingDate]?.event_type === 'concert' || eventsMap[bookingDate]?.event_type === 'party') && (
@@ -474,7 +485,7 @@ export default function BookingPage() {
 
               {!bookingDate ? (
                 <div className="mt-4 p-5 sm:p-6 bg-[#0D1424] border border-[#1E293B] rounded-2xl space-y-5 shadow-lg w-full">
-                  <div className="space-y-3"><h4 className="text-cyan-400 font-bold text-lg text-center tracking-wide">เงื่อนไขการจองโต๊ะ</h4><ul className="text-slate-300 space-y-2 text-sm sm:text-base"><li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> 1 โต๊ะ สามารถอยู่ได้ขั้นต่ำ 4 ท่าน</li><li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> สามารถจองล่วงหน้าได้ 15 วัน</li><li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> ปิดรับจองโต๊ะเวลา 19:00 น. ของทุกวัน</li></ul></div>
+                  <div className="space-y-3"><h4 className="text-cyan-400 font-bold text-lg text-center tracking-wide">เงื่อนไขการจองโต๊ะ</h4><ul className="text-slate-300 space-y-2 text-sm sm:text-base"><li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> 1 โต๊ะ สามารถอยู่ได้ขั้นต่ำ 4 ท่าน</li><li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> สามารถจองล่วงหน้าได้ตามปฏิทินที่เปิดรับ</li><li className="flex items-start gap-2"><span className="text-cyan-500 mt-0.5">•</span> ปิดรับจองโต๊ะเวลา 19:00 น. (วันจัดงานอ้างอิงเวลาตามระบบ)</li></ul></div>
                   <div className="w-full h-px bg-[#1E293B]"></div>
                   <div className="space-y-3"><h4 className="text-purple-400 font-bold text-lg text-center tracking-wide">เงื่อนไขการปล่อยโต๊ะ</h4><ul className="text-slate-300 space-y-2 text-sm sm:text-base"><li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> กรุณามารับโต๊ะภายในเวลาที่ท่านเลือกจองไว้</li><li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> อาทิตย์-พฤหัสบดี มารับโต๊ะก่อน 21:00 น.</li><li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> ศุกร์-เสาร์ รับโต๊ะก่อน 20:00 น.</li><li className="flex items-start gap-2"><span className="text-purple-500 mt-0.5">•</span> สำหรับลูกค้าที่ต้องการจองโซน VIP สามารถติดต่อแอดมินโดยตรงได้เลยนะคะ</li></ul></div>
                   <div className="mt-5 p-3.5 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-center"><p className="text-cyan-400 font-mono text-xs sm:text-sm animate-pulse font-semibold">กรุณาเลือกวันที่ด้านบน เพื่อเริ่มทำรายการจอง</p></div>
@@ -530,7 +541,6 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  {/* 🟢 5. ข้อมูลลูกค้าและสิทธิ์พิเศษ (ปรับ UI ใหม่แล้ว) */}
                   <div className="space-y-4 pt-4 w-full border-t border-slate-800/80 mt-5">
                     <label className="font-semibold text-base sm:text-lg flex items-center gap-1.5 text-gray-200 leading-tight mb-2">
                       5. ข้อมูลลูกค้าและสิทธิ์พิเศษ
@@ -538,7 +548,6 @@ export default function BookingPage() {
 
                     <div className="flex flex-col gap-4 sm:gap-5 w-full">
                       
-                      {/* แถวที่ 1: ชื่อลูกค้า และ ชื่อเซลล์ (คู่กัน) */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 w-full">
                         <div className="space-y-2 w-full">
                           <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><User size={16} style={{ color: THEME.pink }} /> ชื่อผู้จอง / นามแฝง</label>
@@ -550,7 +559,6 @@ export default function BookingPage() {
                         </div>
                       </div>
 
-                      {/* แถวที่ 2: เบอร์โทรศัพท์ และ รหัสสมาชิก (คู่กัน) */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 w-full">
                         <div className="space-y-2 w-full">
                           <label className="font-semibold text-sm sm:text-base flex items-center gap-1.5 text-gray-300"><Phone size={16} style={{ color: THEME.pink }} /> เบอร์โทรศัพท์ติดต่อ</label>
